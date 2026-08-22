@@ -8,6 +8,7 @@ export class UsersController {
     private readonly createUserUseCase: createUserUseCase.CreateUserUseCase,
   ) {}
 
+  
   @Post()
   async createUser(
     @Body() body: createUserUseCase.CreateUserInput,
