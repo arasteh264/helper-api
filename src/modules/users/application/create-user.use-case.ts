@@ -1,11 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
 import * as userRepository from '../domain/repositories/user.repository';
 import { User } from '../domain/entities/user.entity';
 
-
-
-export interface CreateUserInput {
+export interface CreateUserCommand {
   name: string;
   email: string;
   phone: string;
@@ -18,13 +16,15 @@ export class CreateUserUseCase {
     private readonly userRepository: userRepository.UserRepository,
   ) {}
 
-  async execute(input: CreateUserInput): Promise<void> {
-    const user = User.create(
-      input.name,
-      input.email,
-      input.phone,
-    );
+  async execute(input: CreateUserCommand): Promise<User> {
+    const existingUser = await this.userRepository.findByEmail(input.email);
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+    const user = User.create(input.name, input.email, input.phone);
 
     await this.userRepository.save(user);
+
+    return user;
   }
 }
