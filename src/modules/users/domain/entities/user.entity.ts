@@ -32,6 +32,28 @@ export class User {
     );
   }
 
+  static reconstitute(
+    id: string,
+    name: string,
+    email: string,
+    phone: string,
+    role: UserRole,
+    status: UserStatus,
+    createdAt: Date,
+    updatedAt: Date,
+  ): User {
+    return new User(
+      id,
+      name,
+      email,
+      phone,
+      role,
+      status,
+      createdAt,
+      updatedAt,
+    );
+  }
+
   get status(): UserStatus {
     return this._status;
   }
