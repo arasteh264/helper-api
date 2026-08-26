@@ -21,6 +21,10 @@ export class CreateUserUseCase {
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
+    const existingByPhone = await this.userRepository.findByPhone(input.phone);
+    if (existingByPhone) {
+      throw new ConflictException('User with this phone already exists');
+    }
     const user = User.create(input.name, input.email, input.phone);
 
     await this.userRepository.save(user);
