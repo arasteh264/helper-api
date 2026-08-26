@@ -28,13 +28,39 @@ export class PrismaUserRepository implements UserRepository {
     },
   });
 }
+async findByPhone(phone: string): Promise<User | null> {
+  const user = await this.prisma.user.findFirst({
+    where: { phone },
+  });
 
+  if (!user) {
+    return null;
+  }
+
+  return User.reconstitute(
+    user.id,
+    user.name,
+    user.email,
+    user.phone,
+    user.role as UserRole,
+    user.status as UserStatus,
+    user.createdAt,
+    user.updatedAt,
+  );
+}
 async findAll(params: { page: number; pageSize: number; search?: string }) {
   const { page, pageSize, search } = params;
 
-  const where = search
-    ? { name: { contains: search, mode: 'insensitive' as const } }
+    const where = search
+    ? {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { phone: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
     : {};
+    console.log("🚀 ~ PrismaUserRepository ~ findAll ~ where:", where)
+
 
   const [rows, total] = await Promise.all([
     this.prisma.user.findMany({
@@ -56,6 +82,7 @@ async findAll(params: { page: number; pageSize: number; search?: string }) {
         user.createdAt,
         user.updatedAt,
       ));
+  console.log("🚀 ~ PrismaUserRepository ~ findAll ~ items:", items)
 
   return buildPaginatedResult(items, total);
 }
