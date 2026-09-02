@@ -59,7 +59,6 @@ async findAll(params: { page: number; pageSize: number; search?: string }) {
         ],
       }
     : {};
-    console.log("🚀 ~ PrismaUserRepository ~ findAll ~ where:", where)
 
 
   const [rows, total] = await Promise.all([
@@ -82,7 +81,6 @@ async findAll(params: { page: number; pageSize: number; search?: string }) {
         user.createdAt,
         user.updatedAt,
       ));
-  console.log("🚀 ~ PrismaUserRepository ~ findAll ~ items:", items)
 
   return buildPaginatedResult(items, total);
 }
@@ -129,4 +127,16 @@ async findAll(params: { page: number; pageSize: number; search?: string }) {
       user.updatedAt,
     );
   }
+
+  async update(user: User): Promise<void> {
+  await this.prisma.user.update({
+    where: { id: user.id },
+    data: {
+      name: user.name,
+      phone: user.phone,
+      status: user.status as unknown as PrismaUserStatus,
+      updatedAt: user.updatedAt,
+    },
+  });
+}
 }
