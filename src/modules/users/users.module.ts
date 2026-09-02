@@ -8,6 +8,9 @@ import { PrismaUserRepository } from './infrastructure/repositories/prisma-user.
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { GetUserUseCase } from './application/get-user.use-case';
 import { GetAllUserUseCase } from './application/get-allUser.use-case';
+import { UpdateUserUseCase } from './application/update-user.use-case';
+import { PASSWORD_HASHER } from './domain/services/password-hasher.token';
+import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-hasher';
 
 @Module({
   controllers: [UsersController],
@@ -17,10 +20,16 @@ import { GetAllUserUseCase } from './application/get-allUser.use-case';
     CreateUserUseCase,
     GetUserUseCase,
     GetAllUserUseCase,
+    UpdateUserUseCase,
     {
       provide: USER_REPOSITORY,
       useClass: PrismaUserRepository,
     },
+     {
+      provide: PASSWORD_HASHER,
+      useClass: BcryptPasswordHasher,
+    },
   ],
+   exports: [USER_REPOSITORY, PASSWORD_HASHER],
 })
 export class UsersModule {}

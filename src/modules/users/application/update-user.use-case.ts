@@ -2,7 +2,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import * as userRepository from "../domain/repositories/user.repository";
 import { USER_REPOSITORY } from "../domain/repositories/user.repository.token";
-import { User } from "generated/prisma/client";
+import { User } from "../domain/entities/user.entity"; 
 
 @Injectable()
 export class UpdateUserUseCase {
