@@ -12,16 +12,20 @@ export class UpdateUserUseCase {
   ) {}
 
   async execute(id: string, dto: UpdateUserDto): Promise<User> {
-    const user = await this.userRepository.findById(id);
+  const user = await this.userRepository.findById(id);
 
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    user.updateProfile(dto.name, dto.phone);
-
-    await this.userRepository.update(user);
-
-    return user;
+  if (!user) {
+    throw new NotFoundException('User not found');
   }
+
+  user.updateProfile(dto.name, dto.phone);
+
+  if (dto.email !== undefined) {
+    user.changeEmail(dto.email);
+  }
+
+  await this.userRepository.update(user);
+
+  return user;
+}
 }
