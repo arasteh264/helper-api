@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CreateUserDto } from '../../application/dto/create-user.dto';
 import { CreateUserUseCase } from '../../application/create-user.use-case';
 import { GetUserUseCase } from '../../application/get-user.use-case';
@@ -13,6 +23,10 @@ import {
 } from '@nestjs/swagger';
 import { UpdateUserUseCase } from '../../application/update-user.use-case';
 import { UpdateUserDto } from '../../application/dto/update-user.dto';
+import * as tokenGeneratorPort from 'src/modules/auth/domain/services/token-generator.port';
+import { CurrentUser } from 'src/modules/auth/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/modules/auth/presentation/guards/jwt-auth.guard';
+import { TokenPayload } from 'src/modules/auth/domain/services/token-generator.port';
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
@@ -24,25 +38,37 @@ export class UsersController {
   ) {}
 
   @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({ status: 201, description: 'User created successfully.' })
   @Post()
   async createUser(@Body() dto: CreateUserDto) {
     return this.createUserUseCase.execute({
       name: dto.name,
       email: dto.email,
       phone: dto.phone,
+      password: dto.password,
     });
   }
 
- @ApiOperation({ summary: 'Get all user by  search ' })
+  @ApiOperation({ summary: 'Get all user by  search ' })
   @Get()
   async getAllUsers(@Query() query: PaginationQueryDto) {
     return this.getAllUserUseCase.execute(query);
   }
 
+  @ApiOperation({ summary: 'Get current logged-in user' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getMe(@CurrentUser() currentUser: tokenGeneratorPort.TokenPayload) {
+    const user = await this.getUserUseCase.execute(currentUser.userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return UserResponseDto.fromEntity(user);
+  }
+
   @ApiOperation({ summary: 'Get user by id' })
-  @ApiResponse({ status: 200, description: 'User found.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
   @Get(':id')
   async getUser(@Param('id') id: string) {
     const user = await this.getUserUseCase.execute(id);
@@ -54,14 +80,13 @@ export class UsersController {
     return UserResponseDto.fromEntity(user);
   }
 
-
-@Patch(':id')
-async update(
-  @Param('id') id: string,
-  @Body() dto: UpdateUserDto,
-): Promise<UserResponseDto> {
-  const user = await this.updateUserUseCase.execute(id, dto);
-  return UserResponseDto.fromEntity(user);
-}
-
+  @ApiOperation({ summary: 'Update user information' })
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
+    const user = await this.updateUserUseCase.execute(id, dto);
+    return UserResponseDto.fromEntity(user);
+  }
 }
