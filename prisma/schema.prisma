@@ -34,3 +34,65 @@ model User {
   otpCode      String?
   otpExpiresAt DateTime?
 }
+
+model ProviderProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  bio        String?
+  rating     Float    @default(0)
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  skills     ProviderSkill[]
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  providers ProviderSkill[]
+   serviceRequests  ServiceRequestSkill[] 
+}
+
+model ProviderSkill {
+  providerProfileId String
+  skillId           String
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+  skill           Skill           @relation(fields: [skillId], references: [id])
+
+  @@id([providerProfileId, skillId])
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  OFFER_ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  DISPUTED
+}
+model ServiceRequest {
+  id          String               @id @default(uuid())
+  customerId  String
+  title       String
+  description String
+  status      ServiceRequestStatus @default(OPEN)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  skills      ServiceRequestSkill[]
+}
+
+model ServiceRequestSkill {
+  serviceRequestId String
+  skillId          String
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id])
+  skill          Skill          @relation(fields: [skillId], references: [id])
+
+  @@id([serviceRequestId, skillId])
+}
