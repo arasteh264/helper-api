@@ -5,7 +5,6 @@ import { USER_REPOSITORY } from './domain/repositories/user.repository.token';
 import { CreateUserUseCase } from './application/create-user.use-case';
 import { PrismaUserRepository } from './infrastructure/repositories/prisma-user.repository';
 
-import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { GetUserUseCase } from './application/get-user.use-case';
 import { GetAllUserUseCase } from './application/get-allUser.use-case';
 import { UpdateUserUseCase } from './application/update-user.use-case';
@@ -16,7 +15,6 @@ import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-
   controllers: [UsersController],
 
   providers: [
-    PrismaService,
     CreateUserUseCase,
     GetUserUseCase,
     GetAllUserUseCase,
