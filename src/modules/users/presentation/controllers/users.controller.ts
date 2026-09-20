@@ -37,6 +37,7 @@ export class UsersController {
     private readonly updateUserUseCase: UpdateUserUseCase,
   ) {}
 
+  
   @ApiOperation({ summary: 'Create a new user' })
   @Post()
   async createUser(@Body() dto: CreateUserDto) {
