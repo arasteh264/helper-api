@@ -7,9 +7,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
+import { StorageModule } from './shared/storage/storage.module';
 
 @Module({
-  imports: [DatabaseModule, UsersModule, AuthModule, ProvidersModule,ServiceRequestsModule],
+  imports: [DatabaseModule, StorageModule, UsersModule, AuthModule, ProvidersModule,ServiceRequestsModule],
   controllers: [AppController],
   providers: [AppService],
 })

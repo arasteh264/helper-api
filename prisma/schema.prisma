@@ -19,20 +19,20 @@ enum UserStatus {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  name         String
-  email        String    @unique
-  phone        String    @unique
-  passwordHash String?
-  googleId     String?   @unique
-  role         UserRole
-  status       UserStatus
+  id               String    @id @default(uuid())
+  name             String
+  email            String    @unique
+  phone            String    @unique
+  passwordHash     String?
+  googleId         String?   @unique
+  role             UserRole
+  status           UserStatus
   resetToken       String?
   resetTokenExpiry DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  otpCode      String?
-  otpExpiresAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  otpCode          String?
+  otpExpiresAt     DateTime?
 }
 
 model ProviderProfile {
@@ -52,8 +52,8 @@ model Skill {
   name      String   @unique
   createdAt DateTime @default(now())
 
-  providers ProviderSkill[]
-   serviceRequests  ServiceRequestSkill[] 
+  providers       ProviderSkill[]
+  serviceRequests ServiceRequestSkill[]
 }
 
 model ProviderSkill {
@@ -75,16 +75,33 @@ enum ServiceRequestStatus {
   EXPIRED
   DISPUTED
 }
-model ServiceRequest {
-  id          String               @id @default(uuid())
-  customerId  String
-  title       String
-  description String
-  status      ServiceRequestStatus @default(OPEN)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
 
-  skills      ServiceRequestSkill[]
+enum PreferredTime {
+  URGENT
+  THIS_WEEK
+  FLEXIBLE
+}
+
+model ServiceRequest {
+  id            String               @id @default(uuid())
+  customerId    String
+  title         String
+  description   String
+  status        ServiceRequestStatus @default(OPEN)
+
+  address       String?
+  latitude      Float?
+  longitude     Float?
+
+  budgetMin     Float?
+  budgetMax     Float?
+  preferredTime PreferredTime?
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  skills        ServiceRequestSkill[]
+  images        ServiceRequestImage[]
 }
 
 model ServiceRequestSkill {
@@ -95,4 +112,14 @@ model ServiceRequestSkill {
   skill          Skill          @relation(fields: [skillId], references: [id])
 
   @@id([serviceRequestId, skillId])
+}
+
+model ServiceRequestImage {
+  id               String   @id @default(uuid())
+  serviceRequestId String
+  url              String
+  publicId         String
+  createdAt        DateTime @default(now())
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id])
 }

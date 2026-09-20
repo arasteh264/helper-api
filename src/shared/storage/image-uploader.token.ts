@@ -1,0 +1,1 @@
+export const IMAGE_UPLOADER = Symbol('IMAGE_UPLOADER');

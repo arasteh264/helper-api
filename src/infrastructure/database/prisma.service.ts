@@ -5,6 +5,7 @@ import { PrismaClient } from '../../../generated/prisma/client';
 export class PrismaService extends PrismaClient {
   serviceRequest: any;
     serviceRequestSkill: any;
+  serviceRequestImage: any;
   constructor() {
     console.log(process.env.DATABASE_URL);
     
