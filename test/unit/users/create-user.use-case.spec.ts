@@ -1,8 +1,8 @@
 // import { ConflictException } from '@nestjs/common';
-// import { CreateUserUseCase } from '@/modules/users/application/create-user.use-case';
-// import { User } from '@/modules/users/domain/entities/user.entity';
-// import { UserRepository } from '@/modules/users/domain/repositories/user.repository';
-// import { PasswordHasher } from '@/modules/users/domain/services/password-hasher.port';
+// import { CreateUserUseCase } from '../../../src/modules/users/application/create-user.use-case';
+// import { User } from '../../../src/modules/users/domain/entities/user.entity';
+// import { UserRepository } from '../../../src/modules/users/domain/repositories/user.repository';
+// import { PasswordHasher } from '../../../src/modules/users/domain/services/password-hasher.port';
 
 // function buildInput(overrides: Partial<{
 //   name: string;

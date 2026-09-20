@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/modules/auth/presentation/guards/jwt-auth.guard';
-import { CurrentUser } from '@/modules/auth/presentation/decorators/current-user.decorator';
-import type { TokenPayload } from '@/modules/auth/domain/services/token-generator.port';
+import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 import { CreateProviderProfileUseCase } from '../../application/create-provider-profile.use-case';
 import { CreateProviderProfileDto } from '../../application/dto/create-provider-profile.dto';
 import { AddSkillDto } from '../../application/dto/add-skill.dto';

@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import type { ServiceRequestRepository } from '../domain/repositories/service-request.repository';
 import { SERVICE_REQUEST_REPOSITORY } from '../domain/repositories/service-request.repository.token';
-import { IMAGE_UPLOADER } from '@/shared/storage/image-uploader.token';
-import type { ImageUploader } from '@/shared/storage/image-uploader.port';
+import { IMAGE_UPLOADER } from '../../../shared/storage/image-uploader.token';
+import type { ImageUploader } from '../../../shared/storage/image-uploader.port';
 
 @Injectable()
 export class UploadServiceRequestImageUseCase {
