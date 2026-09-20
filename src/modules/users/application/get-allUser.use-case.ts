@@ -3,8 +3,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { User } from '../domain/entities/user.entity';
 import type { UserRepository } from '../domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
-import { PaginationQueryDto } from 'src/shared/dto/pagination-query.dto';
-import { PaginatedResult } from 'src/shared/types/paginated-result.type';
+import { PaginationQueryDto } from '@/shared/dto/pagination-query.dto';
+import { PaginatedResult } from '@/shared/types/paginated-result.type';
 
 @Injectable()
 export class GetAllUserUseCase {
