@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
-import { ImageUploader, UploadedImage } from 'src/shared/storage/image-uploader.port';
+import { ImageUploader, UploadedImage } from '@/shared/storage/image-uploader.port';
 
 
 @Injectable()

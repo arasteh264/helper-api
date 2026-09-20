@@ -5,10 +5,10 @@ import {
 } from '../../../../../generated/prisma/enums';
 import { User } from '../../domain/entities/user.entity';
 import type { UserRepository } from '../../domain/repositories/user.repository';
-import { PrismaService } from 'src/infrastructure/database/prisma.service';
+import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { UserRole } from '../../domain/entities/user-role.enum';
 import { UserStatus } from '../../domain/entities/user-status.enum';
-import { buildPaginatedResult } from 'src/shared/utils/paginate.util';
+import { buildPaginatedResult } from '@/shared/utils/paginate.util';
 
 @Injectable()
 export class PrismaUserRepository implements UserRepository {

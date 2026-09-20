@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/infrastructure/database/prisma.service';
+import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { ServiceRequest } from '../../domain/entities/service-request.entity';
 import { ServiceRequestStatus } from '../../domain/entities/service-request-status.enum';
 import { PreferredTime } from '../../domain/entities/preferred-time.enum';

@@ -1,4 +1,4 @@
-import { PaginatedResult } from 'src/shared/types/paginated-result.type';
+import { PaginatedResult } from '@/shared/types/paginated-result.type';
 import { User } from '../entities/user.entity';
 
 export interface UserRepository {
