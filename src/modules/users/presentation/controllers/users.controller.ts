@@ -14,7 +14,7 @@ import { CreateUserUseCase } from '../../application/create-user.use-case';
 import { GetUserUseCase } from '../../application/get-user.use-case';
 import { UserResponseDto } from '../../application/dto/user-response.dto';
 import { GetAllUserUseCase } from '../../application/get-allUser.use-case';
-import { PaginationQueryDto } from '@/shared/dto/pagination-query.dto';
+import { PaginationQueryDto } from '../../../../shared/dto/pagination-query.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -23,10 +23,10 @@ import {
 } from '@nestjs/swagger';
 import { UpdateUserUseCase } from '../../application/update-user.use-case';
 import { UpdateUserDto } from '../../application/dto/update-user.dto';
-import * as tokenGeneratorPort from '@/modules/auth/domain/services/token-generator.port';
-import { CurrentUser } from '@/modules/auth/presentation/decorators/current-user.decorator';
-import { JwtAuthGuard } from '@/modules/auth/presentation/guards/jwt-auth.guard';
-import { TokenPayload } from '@/modules/auth/domain/services/token-generator.port';
+import * as tokenGeneratorPort from '../../../auth/domain/services/token-generator.port';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
+import { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
