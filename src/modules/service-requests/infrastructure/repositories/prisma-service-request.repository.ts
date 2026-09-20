@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/infrastructure/database/prisma.service';
 import { ServiceRequest } from '../../domain/entities/service-request.entity';
 import { ServiceRequestStatus } from '../../domain/entities/service-request-status.enum';
+import { PreferredTime } from '../../domain/entities/preferred-time.enum';
 import type { ServiceRequestRepository } from '../../domain/repositories/service-request.repository';
 
 @Injectable()
@@ -16,6 +17,12 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
         title: request.title,
         description: request.description,
         status: request.status as unknown as any,
+        address: request.address,
+        latitude: request.latitude,
+        longitude: request.longitude,
+        budgetMin: request.budgetMin,
+        budgetMax: request.budgetMax,
+        preferredTime: request.preferredTime as unknown as any,
         createdAt: request.createdAt,
         updatedAt: request.updatedAt,
       },
@@ -29,6 +36,12 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
         title: request.title,
         description: request.description,
         status: request.status as unknown as any,
+        address: request.address,
+        latitude: request.latitude,
+        longitude: request.longitude,
+        budgetMin: request.budgetMin,
+        budgetMax: request.budgetMax,
+        preferredTime: request.preferredTime as unknown as any,
         updatedAt: request.updatedAt,
       },
     });
@@ -47,10 +60,26 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
     }
   }
 
+  async addImage(
+    serviceRequestId: string,
+    url: string,
+    publicId: string,
+  ): Promise<{ id: string; url: string }> {
+    const image = await this.prisma.serviceRequestImage.create({
+      data: {
+        serviceRequestId,
+        url,
+        publicId,
+      },
+    });
+
+    return { id: image.id, url: image.url };
+  }
+
   async findById(id: string): Promise<ServiceRequest | null> {
     const record = await this.prisma.serviceRequest.findUnique({
       where: { id },
-      include: { skills: true },
+      include: { skills: true, images: true },
     });
 
     if (!record) {
@@ -63,7 +92,7 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
   async findByCustomerId(customerId: string): Promise<ServiceRequest[]> {
     const records = await this.prisma.serviceRequest.findMany({
       where: { customerId },
-      include: { skills: true },
+      include: { skills: true, images: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -80,7 +109,7 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
           },
         },
       },
-      include: { skills: true },
+      include: { skills: true, images: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -95,6 +124,13 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
       record.description,
       record.status as ServiceRequestStatus,
       record.skills.map((s: any) => s.skillId),
+      record.address,
+      record.latitude,
+      record.longitude,
+      record.budgetMin,
+      record.budgetMax,
+      record.preferredTime as PreferredTime | null,
+      record.images.map((img: any) => img.id),
       record.createdAt,
       record.updatedAt,
     );

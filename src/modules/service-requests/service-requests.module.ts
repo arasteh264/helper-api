@@ -5,6 +5,7 @@ import { CreateServiceRequestUseCase } from './application/create-service-reques
 import { AddSkillToRequestUseCase } from './application/add-skill-to-request.use-case';
 import { SERVICE_REQUEST_REPOSITORY } from './domain/repositories/service-request.repository.token';
 import { PrismaServiceRequestRepository } from './infrastructure/repositories/prisma-service-request.repository';
+import { UploadServiceRequestImageUseCase } from './application/upload-service-request-image.use-case';
 
 @Module({
   imports: [ProvidersModule],
@@ -12,6 +13,7 @@ import { PrismaServiceRequestRepository } from './infrastructure/repositories/pr
   providers: [
     CreateServiceRequestUseCase,
     AddSkillToRequestUseCase,
+    UploadServiceRequestImageUseCase,
     {
       provide: SERVICE_REQUEST_REPOSITORY,
       useClass: PrismaServiceRequestRepository,
