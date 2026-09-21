@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsEnum, IsIn, IsOptional } from 'class-validator';
-import { PaginationQueryDto } from '@/shared/dto/pagination-query.dto'; 
+import { PaginationQueryDto } from '../../../../shared/dto/pagination-query.dto'; 
 import { WalletTransactionType } from '../../domain/entities/wallet-transaction-type';
 
 export class ListWalletTransactionsQueryDto extends PaginationQueryDto {

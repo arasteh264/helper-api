@@ -1,7 +1,7 @@
 import { ServiceRequest } from '../entities/service-request.entity';
 import { ServiceRequestStatus } from '../entities/service-request-status.enum';
 import { PreferredTime } from '../entities/preferred-time.enum';
-import { PaginatedResult } from '@/shared/types/paginated-result.type';
+import { PaginatedResult } from '../../../../shared/types/paginated-result.type';
 
 export interface FindAllServiceRequestsFilter {
   page: number;

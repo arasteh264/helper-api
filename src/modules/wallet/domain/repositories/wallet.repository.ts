@@ -1,4 +1,4 @@
-import type { PaginatedResult } from '@/shared/types/paginated-result.type';
+import type { PaginatedResult } from '../../../../shared/types/paginated-result.type';
 import type { WalletTransactionType } from '../entities/wallet-transaction-type';
 
 export interface WalletSummary {

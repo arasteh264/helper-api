@@ -7,8 +7,8 @@ import type {
   FindAllServiceRequestsFilter,
   ServiceRequestRepository,
 } from '../../domain/repositories/service-request.repository';
-import { buildPaginatedResult } from '@/shared/utils/paginate.util';
-import { PaginatedResult } from '@/shared/types/paginated-result.type';
+import { buildPaginatedResult } from '../../../../shared/utils/paginate.util';
+import { PaginatedResult } from '../../../../shared/types/paginated-result.type';
 
 @Injectable()
 export class PrismaServiceRequestRepository implements ServiceRequestRepository {

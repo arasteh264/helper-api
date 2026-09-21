@@ -14,7 +14,7 @@ import {
 
 import { ServiceRequestStatus } from '../../domain/entities/service-request-status.enum';
 import { PreferredTime } from '../../domain/entities/preferred-time.enum';
-import { PaginationQueryDto } from '@/shared/dto/pagination-query.dto';
+import { PaginationQueryDto } from '../../../../shared/dto/pagination-query.dto';
 
 export const SERVICE_REQUEST_SORT_FIELDS = [
   'createdAt',

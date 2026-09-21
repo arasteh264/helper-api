@@ -4,7 +4,7 @@ import type {
   FindAllServiceRequestsFilter,
 } from '../domain/repositories/service-request.repository';
 import { ServiceRequestResponseDto } from './dto/service-request-response.dto';
-import { buildPaginatedResult } from '@/shared/utils/paginate.util';
+import { buildPaginatedResult } from '../../../shared/utils/paginate.util';
 import { SERVICE_REQUEST_REPOSITORY } from '../domain/repositories/service-request.repository.token';
 
 @Injectable()

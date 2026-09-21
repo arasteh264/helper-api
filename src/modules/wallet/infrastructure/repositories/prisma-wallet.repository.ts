@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
-import { buildPaginatedResult } from '@/shared/utils/paginate.util';
-import { PaginatedResult } from '@/shared/types/paginated-result.type';
+import { buildPaginatedResult } from '../../../../shared/utils/paginate.util';
+import { PaginatedResult } from '../../../../shared/types/paginated-result.type';
 import { WalletTransactionType } from '../../domain/entities/wallet-transaction-type';
 import type {
   BankAccountView,
