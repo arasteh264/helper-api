@@ -33,18 +33,24 @@ model User {
   updatedAt        DateTime  @updatedAt
   otpCode          String?
   otpExpiresAt     DateTime?
+  providerProfile ProviderProfile?
 }
 
 model ProviderProfile {
-  id         String   @id @default(uuid())
-  userId     String   @unique
-  bio        String?
-  rating     Float    @default(0)
-  isVerified Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  bio            String?
+  rating         Float    @default(0)
+  isVerified     Boolean  @default(false)
+  avatarUrl      String?
+  avatarPublicId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  skills     ProviderSkill[]
+  user   User            @relation(fields: [userId], references: [id])
+  skills ProviderSkill[]
+  wallet      Wallet?              
+  bankAccount ProviderBankAccount?
 }
 
 model Skill {
@@ -122,4 +128,88 @@ model ServiceRequestImage {
   createdAt        DateTime @default(now())
 
   serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id])
+}
+
+enum WalletTransactionType {
+  EARNING          // واریز بابت کار انجام‌شده
+  PAYOUT_REQUEST   // کسر موجودی بابت درخواست برداشت
+  PAYOUT_REFUND    // برگشت پول درخواست رد یا لغو شده
+  ADJUSTMENT       // اصلاح دستی توسط ادمین
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+
+
+model Wallet {
+  id                String   @id @default(uuid())
+  providerProfileId String   @unique
+  balance           Int      @default(0) // موجودی قابل برداشت
+  totalEarned       Int      @default(0)
+  totalWithdrawn    Int      @default(0) // مجموع برداشت‌های PAID
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  providerProfile ProviderProfile     @relation(fields: [providerProfileId], references: [id])
+  transactions    WalletTransaction[]
+  payouts         PayoutRequest[]
+}
+
+model WalletTransaction {
+  id               String                @id @default(uuid())
+  walletId         String
+  type             WalletTransactionType
+  amount           Int                   // مثبت = واریز، منفی = برداشت
+  balanceAfter     Int
+  description      String?
+  serviceRequestId String?
+  payoutRequestId  String?
+  createdAt        DateTime              @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  // جلوگیری از واریز دوباره برای یک کار (NULLها در Postgres با هم تداخل ندارن)
+  @@unique([walletId, type, serviceRequestId])
+  @@index([walletId, createdAt])
+}
+
+model ProviderBankAccount {
+  id                String   @id @default(uuid())
+  providerProfileId String   @unique
+  holderName        String
+  sheba             String
+  bankName          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+}
+
+model PayoutRequest {
+  id            String       @id @default(uuid())
+  walletId      String
+  amount        Int
+  status        PayoutStatus @default(PENDING)
+
+  // کپی حساب بانکی در لحظه درخواست، تا تغییر بعدی حساب روی درخواست‌های قدیمی اثر نذاره
+  holderName    String
+  sheba         String
+  bankName      String?
+
+  referenceCode String?      // کد پیگیری واریز (توسط ادمین)
+  rejectReason  String?
+  processedById String?
+  processedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt])
+  @@index([status, createdAt])
 }

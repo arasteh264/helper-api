@@ -3,12 +3,74 @@ import { PrismaService } from '../../../../infrastructure/database/prisma.servic
 import { ServiceRequest } from '../../domain/entities/service-request.entity';
 import { ServiceRequestStatus } from '../../domain/entities/service-request-status.enum';
 import { PreferredTime } from '../../domain/entities/preferred-time.enum';
-import type { ServiceRequestRepository } from '../../domain/repositories/service-request.repository';
+import type {
+  FindAllServiceRequestsFilter,
+  ServiceRequestRepository,
+} from '../../domain/repositories/service-request.repository';
+import { buildPaginatedResult } from '@/shared/utils/paginate.util';
+import { PaginatedResult } from '@/shared/types/paginated-result.type';
 
 @Injectable()
 export class PrismaServiceRequestRepository implements ServiceRequestRepository {
   constructor(private readonly prisma: PrismaService) {}
+  async findAll(
+    f: FindAllServiceRequestsFilter,
+  ): Promise<PaginatedResult<ServiceRequest>> {
+    const where: any = {};
 
+    if (f.status) where.status = f.status as unknown as any;
+    if (f.customerId) where.customerId = f.customerId;
+    if (f.preferredTime)
+      where.preferredTime = f.preferredTime as unknown as any;
+
+    if (f.search) {
+      where.OR = [
+        { title: { contains: f.search, mode: 'insensitive' } },
+        { description: { contains: f.search, mode: 'insensitive' } },
+        { address: { contains: f.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (f.skillIds?.length) {
+      where.skills = { some: { skillId: { in: f.skillIds } } };
+    }
+
+    const and: any[] = [];
+    if (f.budgetFrom !== undefined)
+      and.push({ budgetMax: { gte: f.budgetFrom } });
+    if (f.budgetTo !== undefined) and.push({ budgetMin: { lte: f.budgetTo } });
+    if (and.length) where.AND = and;
+
+    if (f.createdFrom || f.createdTo) {
+      where.createdAt = {
+        ...(f.createdFrom && { gte: f.createdFrom }),
+        ...(f.createdTo && { lte: f.createdTo }),
+      };
+    }
+
+    if (f.updatedFrom || f.updatedTo) {
+      where.updatedAt = {
+        ...(f.updatedFrom && { gte: f.updatedFrom }),
+        ...(f.updatedTo && { lte: f.updatedTo }),
+      };
+    }
+
+    const [records, total] = await this.prisma.$transaction([
+      this.prisma.serviceRequest.findMany({
+        where,
+        include: { skills: true, images: true },
+        orderBy: { [f.sortBy]: f.sortOrder },
+        skip: (f.page - 1) * f.pageSize,
+        take: f.pageSize,
+      }),
+      this.prisma.serviceRequest.count({ where }),
+    ]);
+
+    return buildPaginatedResult(
+      records.map((r) => this.toDomain(r)),
+      total,
+    );
+  }
   async save(request: ServiceRequest): Promise<void> {
     await this.prisma.serviceRequest.create({
       data: {
