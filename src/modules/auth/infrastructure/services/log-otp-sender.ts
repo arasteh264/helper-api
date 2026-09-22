@@ -7,5 +7,6 @@ export class LogOtpSender implements OtpSender {
 
   async send(phone: string, code: string): Promise<void> {
     this.logger.log(`OTP for ${phone}: ${code}`);
+    console.log(code);
   }
 }

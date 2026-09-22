@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { UserRepository } from '../../users/domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
 import type { PasswordHasher } from '../../users/domain/services/password-hasher.port';
@@ -10,6 +6,7 @@ import { PASSWORD_HASHER } from '../../users/domain/services/password-hasher.tok
 import type { TokenGenerator } from '../domain/services/token-generator.port';
 import { TOKEN_GENERATOR } from '../domain/services/token-generator.token';
 import { LoginDto } from './dto/login.dto';
+import { UserStatus } from '../../users/domain/entities/user-status.enum';
 
 function isEmail(value: string): boolean {
   return value.includes('@');
@@ -33,6 +30,10 @@ export class LoginUseCase {
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Please verify your phone number first');
     }
 
     if (!user.passwordHash) {
