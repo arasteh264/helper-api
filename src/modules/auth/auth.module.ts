@@ -13,14 +13,15 @@ import { TOKEN_GENERATOR } from './domain/services/token-generator.token';
 import { JwtTokenGenerator } from './infrastructure/services/jwt-token-generator';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { OTP_SENDER } from './domain/services/otp-sender.token';
-import { LogOtpSender } from './infrastructure/services/log-otp-sender';
 import { EMAIL_SENDER } from './domain/services/email-sender.token';
-import { LogEmailSender } from './infrastructure/services/log-email-sender';
 import { NodemailerEmailSender } from './infrastructure/services/nodemailer-email-sender';
+import { SmsModule } from '../sms/sms.module';
+import { KavenegarOtpSender } from './infrastructure/services/kavenegar-otp-sender';
 
 @Module({
   imports: [
     UsersModule,
+    SmsModule,
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
@@ -43,7 +44,7 @@ import { NodemailerEmailSender } from './infrastructure/services/nodemailer-emai
     },
     {
       provide: OTP_SENDER,
-      useClass: LogOtpSender,
+      useClass: KavenegarOtpSender,
     },
     {
       provide: EMAIL_SENDER,

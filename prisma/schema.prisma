@@ -15,25 +15,38 @@ enum UserRole {
 
 enum UserStatus {
   ACTIVE
+  INACTIVE
   SUSPENDED
 }
 
 model User {
-  id               String    @id @default(uuid())
+  id               String           @id @default(uuid())
   name             String
-  email            String    @unique
-  phone            String    @unique
+  email            String           @unique
+  phone            String           @unique
   passwordHash     String?
-  googleId         String?   @unique
+  googleId         String?          @unique
   role             UserRole
   status           UserStatus
   resetToken       String?
   resetTokenExpiry DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   otpCode          String?
   otpExpiresAt     DateTime?
-  providerProfile ProviderProfile?
+  providerProfile  ProviderProfile?
+}
+
+model PendingRegistration {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String   @unique
+  passwordHash String
+  otpCode      String
+  otpExpiresAt DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model ProviderProfile {
@@ -47,9 +60,9 @@ model ProviderProfile {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user   User            @relation(fields: [userId], references: [id])
-  skills ProviderSkill[]
-  wallet      Wallet?              
+  user        User                 @relation(fields: [userId], references: [id])
+  skills      ProviderSkill[]
+  wallet      Wallet?
   bankAccount ProviderBankAccount?
 }
 
@@ -89,25 +102,25 @@ enum PreferredTime {
 }
 
 model ServiceRequest {
-  id            String               @id @default(uuid())
-  customerId    String
-  title         String
-  description   String
-  status        ServiceRequestStatus @default(OPEN)
+  id          String               @id @default(uuid())
+  customerId  String
+  title       String
+  description String
+  status      ServiceRequestStatus @default(OPEN)
 
-  address       String?
-  latitude      Float?
-  longitude     Float?
+  address   String?
+  latitude  Float?
+  longitude Float?
 
   budgetMin     Float?
   budgetMax     Float?
   preferredTime PreferredTime?
 
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  skills        ServiceRequestSkill[]
-  images        ServiceRequestImage[]
+  skills ServiceRequestSkill[]
+  images ServiceRequestImage[]
 }
 
 model ServiceRequestSkill {
@@ -131,10 +144,10 @@ model ServiceRequestImage {
 }
 
 enum WalletTransactionType {
-  EARNING          // واریز بابت کار انجام‌شده
-  PAYOUT_REQUEST   // کسر موجودی بابت درخواست برداشت
-  PAYOUT_REFUND    // برگشت پول درخواست رد یا لغو شده
-  ADJUSTMENT       // اصلاح دستی توسط ادمین
+  EARNING // واریز بابت کار انجام‌شده
+  PAYOUT_REQUEST // کسر موجودی بابت درخواست برداشت
+  PAYOUT_REFUND // برگشت پول درخواست رد یا لغو شده
+  ADJUSTMENT // اصلاح دستی توسط ادمین
 }
 
 enum PayoutStatus {
@@ -143,8 +156,6 @@ enum PayoutStatus {
   REJECTED
   CANCELLED
 }
-
-
 
 model Wallet {
   id                String   @id @default(uuid())
@@ -164,7 +175,7 @@ model WalletTransaction {
   id               String                @id @default(uuid())
   walletId         String
   type             WalletTransactionType
-  amount           Int                   // مثبت = واریز، منفی = برداشت
+  amount           Int // مثبت = واریز، منفی = برداشت
   balanceAfter     Int
   description      String?
   serviceRequestId String?
@@ -191,22 +202,22 @@ model ProviderBankAccount {
 }
 
 model PayoutRequest {
-  id            String       @id @default(uuid())
-  walletId      String
-  amount        Int
-  status        PayoutStatus @default(PENDING)
+  id       String       @id @default(uuid())
+  walletId String
+  amount   Int
+  status   PayoutStatus @default(PENDING)
 
   // کپی حساب بانکی در لحظه درخواست، تا تغییر بعدی حساب روی درخواست‌های قدیمی اثر نذاره
-  holderName    String
-  sheba         String
-  bankName      String?
+  holderName String
+  sheba      String
+  bankName   String?
 
-  referenceCode String?      // کد پیگیری واریز (توسط ادمین)
+  referenceCode String? // کد پیگیری واریز (توسط ادمین)
   rejectReason  String?
   processedById String?
   processedAt   DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   wallet Wallet @relation(fields: [walletId], references: [id])
 

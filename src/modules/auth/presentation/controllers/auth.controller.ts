@@ -34,6 +34,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async requestOtp(@Body() dto: RequestOtpDto) {
     await this.requestOtpUseCase.execute(dto.phone);
+    console.log(dto);
     return { message: 'OTP sent' };
   }
 
@@ -41,6 +42,7 @@ export class AuthController {
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
   async verifyOtp(@Body() dto: VerifyOtpDto) {
+    console.log(dto);
     return this.verifyOtpUseCase.execute(dto.phone, dto.code);
   }
 

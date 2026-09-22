@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -7,6 +8,7 @@ import type { UserRepository } from '../../users/domain/repositories/user.reposi
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
 import type { TokenGenerator } from '../domain/services/token-generator.port';
 import { TOKEN_GENERATOR } from '../domain/services/token-generator.token';
+import { UserStatus } from '../../users/domain/entities/user-status.enum';
 
 @Injectable()
 export class VerifyOtpUseCase {
@@ -22,6 +24,14 @@ export class VerifyOtpUseCase {
 
     if (!user || !user.isOtpValid(code)) {
       throw new UnauthorizedException('Invalid or expired code');
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException('This account is suspended');
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      user.activate();
     }
 
     user.clearOtp();

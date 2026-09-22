@@ -10,12 +10,16 @@ import { GetAllUserUseCase } from './application/get-allUser.use-case';
 import { UpdateUserUseCase } from './application/update-user.use-case';
 import { PASSWORD_HASHER } from './domain/services/password-hasher.token';
 import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-hasher';
+import { SmsModule } from '../sms/sms.module';
+import { VerifyRegistrationOtpUseCase } from './application/verify-registration-otp.use-case';
 
 @Module({
+  imports: [SmsModule],
   controllers: [UsersController],
 
   providers: [
     CreateUserUseCase,
+    VerifyRegistrationOtpUseCase,
     GetUserUseCase,
     GetAllUserUseCase,
     UpdateUserUseCase,
@@ -23,11 +27,11 @@ import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-
       provide: USER_REPOSITORY,
       useClass: PrismaUserRepository,
     },
-     {
+    {
       provide: PASSWORD_HASHER,
       useClass: BcryptPasswordHasher,
     },
   ],
-   exports: [USER_REPOSITORY, PASSWORD_HASHER],
+  exports: [USER_REPOSITORY, PASSWORD_HASHER],
 })
 export class UsersModule {}

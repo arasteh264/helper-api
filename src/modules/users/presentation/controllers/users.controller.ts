@@ -26,7 +26,9 @@ import { UpdateUserDto } from '../../application/dto/update-user.dto';
 import * as tokenGeneratorPort from '../../../auth/domain/services/token-generator.port';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
-import { TokenPayload } from '../../../auth/domain/services/token-generator.port';
+import { VerifyRegistrationOtpDto } from '../../application/dto/verify-registration-otp.dto';
+import { VerifyRegistrationOtpUseCase } from '../../application/verify-registration-otp.use-case';
+
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
@@ -35,18 +37,31 @@ export class UsersController {
     private readonly getUserUseCase: GetUserUseCase,
     private readonly getAllUserUseCase: GetAllUserUseCase,
     private readonly updateUserUseCase: UpdateUserUseCase,
+    private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
   ) {}
 
-  
   @ApiOperation({ summary: 'Create a new user' })
   @Post()
   async createUser(@Body() dto: CreateUserDto) {
-    return this.createUserUseCase.execute({
+    await this.createUserUseCase.execute({
       name: dto.name,
       email: dto.email,
       phone: dto.phone,
       password: dto.password,
     });
+
+    return { message: 'OTP sent' };
+  }
+
+  @ApiOperation({ summary: 'Verify registration OTP and create user' })
+  @Post('verify-otp')
+  async verifyRegistrationOtp(@Body() dto: VerifyRegistrationOtpDto) {
+    const user = await this.verifyRegistrationOtpUseCase.execute(
+      dto.phone,
+      dto.code,
+    );
+
+    return UserResponseDto.fromEntity(user);
   }
 
   @ApiOperation({ summary: 'Get all user by  search ' })

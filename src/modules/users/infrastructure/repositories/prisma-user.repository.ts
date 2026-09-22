@@ -24,6 +24,8 @@ export class PrismaUserRepository implements UserRepository {
         role: user.role as unknown as PrismaUserRole,
         status: user.status as unknown as PrismaUserStatus,
         passwordHash: user.passwordHash,
+        otpCode: user.otpCode,
+        otpExpiresAt: user.otpExpiresAt,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -50,8 +52,8 @@ export class PrismaUserRepository implements UserRepository {
       user.googleId,
       user.otpCode,
       user.otpExpiresAt,
-           user.resetToken,        
-  user.resetTokenExpiry,
+      user.resetToken,
+      user.resetTokenExpiry,
       user.createdAt,
       user.updatedAt,
     );
@@ -79,24 +81,24 @@ export class PrismaUserRepository implements UserRepository {
       this.prisma.user.count({ where }),
     ]);
 
-   const items = rows.map((user) =>
-  User.reconstitute(
-    user.id,
-    user.name,
-    user.email,
-    user.phone,
-    user.role as UserRole,
-    user.status as UserStatus,
-    user.passwordHash,
-    user.googleId,
-    user.otpCode,
-    user.otpExpiresAt,
-    user.resetToken,       
-    user.resetTokenExpiry,  
-    user.createdAt,
-    user.updatedAt,
-  ),
-);
+    const items = rows.map((user) =>
+      User.reconstitute(
+        user.id,
+        user.name,
+        user.email,
+        user.phone,
+        user.role as UserRole,
+        user.status as UserStatus,
+        user.passwordHash,
+        user.googleId,
+        user.otpCode,
+        user.otpExpiresAt,
+        user.resetToken,
+        user.resetTokenExpiry,
+        user.createdAt,
+        user.updatedAt,
+      ),
+    );
 
     return buildPaginatedResult(items, total);
   }
@@ -121,8 +123,8 @@ export class PrismaUserRepository implements UserRepository {
       user.googleId,
       user.otpCode,
       user.otpExpiresAt,
-       user.resetToken,        
-  user.resetTokenExpiry,
+      user.resetToken,
+      user.resetTokenExpiry,
       user.createdAt,
       user.updatedAt,
     );
@@ -148,56 +150,55 @@ export class PrismaUserRepository implements UserRepository {
       user.googleId,
       user.otpCode,
       user.otpExpiresAt,
-       user.resetToken,        
-  user.resetTokenExpiry,
+      user.resetToken,
+      user.resetTokenExpiry,
       user.createdAt,
       user.updatedAt,
     );
   }
 
   async update(user: User): Promise<void> {
-  await this.prisma.user.update({
-    where: { id: user.id },
-    data: {
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      status: user.status as unknown as PrismaUserStatus,
-      passwordHash: user.passwordHash,      
-      otpCode: user.otpCode,
-      otpExpiresAt: user.otpExpiresAt,
-      resetToken: user.resetToken,           
-      resetTokenExpiry: user.resetTokenExpiry, 
-      updatedAt: user.updatedAt,
-    },
-  });
-}
-
-async findByResetToken(token: string): Promise<User | null> {
-  const user = await this.prisma.user.findFirst({
-    where: { resetToken: token },
-  });
-
-  if (!user) {
-    return null;
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        status: user.status as unknown as PrismaUserStatus,
+        passwordHash: user.passwordHash,
+        otpCode: user.otpCode,
+        otpExpiresAt: user.otpExpiresAt,
+        resetToken: user.resetToken,
+        resetTokenExpiry: user.resetTokenExpiry,
+        updatedAt: user.updatedAt,
+      },
+    });
   }
 
-  return User.reconstitute(
-    user.id,
-    user.name,
-    user.email,
-    user.phone,
-    user.role as UserRole,
-    user.status as UserStatus,
-    user.passwordHash,
-    user.googleId,
-    user.otpCode,
-    user.otpExpiresAt,
-    user.resetToken,       
-    user.resetTokenExpiry,  
-    user.createdAt,
-    user.updatedAt,
-  );
-}
+  async findByResetToken(token: string): Promise<User | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { resetToken: token },
+    });
 
+    if (!user) {
+      return null;
+    }
+
+    return User.reconstitute(
+      user.id,
+      user.name,
+      user.email,
+      user.phone,
+      user.role as UserRole,
+      user.status as UserStatus,
+      user.passwordHash,
+      user.googleId,
+      user.otpCode,
+      user.otpExpiresAt,
+      user.resetToken,
+      user.resetTokenExpiry,
+      user.createdAt,
+      user.updatedAt,
+    );
+  }
 }

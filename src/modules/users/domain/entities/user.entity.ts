@@ -45,6 +45,34 @@ export class User {
     );
   }
 
+  static createUnverified(
+    name: string,
+    email: string,
+    phone: string,
+    passwordHash: string | null,
+    otpCode: string,
+    otpExpiresAt: Date,
+  ): User {
+    const now = new Date();
+
+    return new User(
+      crypto.randomUUID(),
+      name,
+      email,
+      phone,
+      UserRole.CUSTOMER,
+      UserStatus.INACTIVE,
+      passwordHash,
+      null,
+      otpCode,
+      otpExpiresAt,
+      null,
+      null,
+      now,
+      now,
+    );
+  }
+
   static reconstitute(
     id: string,
     name: string,
