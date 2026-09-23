@@ -19,6 +19,19 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum ProviderVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProviderDocumentType {
+  NATIONAL_CARD
+  BUSINESS_LICENSE
+  CERTIFICATE
+  OTHER
+}
+
 model User {
   id               String           @id @default(uuid())
   name             String
@@ -55,6 +68,10 @@ model ProviderProfile {
   bio            String?
   rating         Float    @default(0)
   isVerified     Boolean  @default(false)
+  verificationStatus ProviderVerificationStatus @default(PENDING)
+  verificationNote   String?
+  verifiedAt         DateTime?
+  isAvailable        Boolean @default(false)
   avatarUrl      String?
   avatarPublicId String?
   createdAt      DateTime @default(now())
@@ -62,8 +79,39 @@ model ProviderProfile {
 
   user        User                 @relation(fields: [userId], references: [id])
   skills      ProviderSkill[]
+  documents   ProviderDocument[]
+  workingHours ProviderWorkingHour[]
   wallet      Wallet?
   bankAccount ProviderBankAccount?
+}
+
+model ProviderDocument {
+  id                String               @id @default(uuid())
+  providerProfileId String
+  type              ProviderDocumentType
+  url               String
+  publicId          String?
+  createdAt         DateTime             @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+
+  @@index([providerProfileId, createdAt])
+}
+
+model ProviderWorkingHour {
+  id                String   @id @default(uuid())
+  providerProfileId String
+  dayOfWeek         Int
+  isActive          Boolean  @default(true)
+  startTime         String
+  endTime           String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+
+  @@unique([providerProfileId, dayOfWeek])
+  @@index([dayOfWeek, isActive])
 }
 
 model Skill {

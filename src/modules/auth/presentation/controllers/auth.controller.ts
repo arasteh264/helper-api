@@ -1,5 +1,17 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { LoginUseCase } from '../../application/login.use-case';
 import { LoginDto } from '../../application/dto/login.dto';
 import { RequestOtpUseCase } from '../../application/request-otp.use-case';
@@ -10,6 +22,11 @@ import { ForgotPasswordUseCase } from '../../application/forgot-password.use-cas
 import { ResetPasswordUseCase } from '../../application/reset-password.use-case';
 import { ForgotPasswordDto } from '../../application/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../../application/dto/reset-password.dto';
+import { ChangePasswordDto } from '../../application/dto/change-password.dto';
+import { ChangePasswordUseCase } from '../../application/change-password.use-case';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { CurrentUser } from '../decorators/current-user.decorator';
+import type { TokenPayload } from '../../domain/services/token-generator.port';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -20,6 +37,7 @@ export class AuthController {
     private readonly verifyOtpUseCase: VerifyOtpUseCase,
     private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
+    private readonly changePasswordUseCase: ChangePasswordUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Login with email or phone' })
@@ -66,5 +84,22 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.resetPasswordUseCase.execute(dto.token, dto.newPassword);
     return { message: 'Password reset successfully.' };
+  }
+
+  @ApiOperation({ summary: 'Change password' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser() currentUser: TokenPayload,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.changePasswordUseCase.execute(
+      currentUser.userId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+    return { message: 'Password changed successfully.' };
   }
 }

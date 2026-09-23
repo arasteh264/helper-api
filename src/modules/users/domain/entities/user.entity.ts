@@ -7,7 +7,7 @@ export class User {
     private _name: string,
     private _email: string,
     private _phone: string,
-    public readonly role: UserRole,
+    private _role: UserRole,
     private _status: UserStatus,
     private _passwordHash: string | null,
     private _googleId: string | null,
@@ -139,6 +139,14 @@ export class User {
   }
   get email(): string {
     return this._email;
+  }
+  get role(): UserRole {
+    return this._role;
+  }
+
+  setRole(role: UserRole): void {
+    this._role = role;
+    this._updatedAt = new Date();
   }
   suspend(): void {
     if (this._status === UserStatus.SUSPENDED) return;
