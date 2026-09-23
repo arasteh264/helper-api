@@ -20,6 +20,20 @@ class ProviderSkillDto {
   name!: string;
 }
 
+class ProviderWorkingHourDto {
+  @ApiProperty()
+  dayOfWeek!: number;
+
+  @ApiProperty()
+  isActive!: boolean;
+
+  @ApiProperty()
+  startTime!: string;
+
+  @ApiProperty()
+  endTime!: string;
+}
+
 export class ProviderProfileDetailsResponseDto {
   @ApiProperty()
   id!: string;
@@ -33,6 +47,18 @@ export class ProviderProfileDetailsResponseDto {
   @ApiProperty()
   isVerified!: boolean;
 
+  @ApiProperty({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
+  verificationStatus!: 'PENDING' | 'APPROVED' | 'REJECTED';
+
+  @ApiProperty({ nullable: true, type: String })
+  verificationNote!: string | null;
+
+  @ApiProperty({ nullable: true, type: Date })
+  verifiedAt!: Date | null;
+
+  @ApiProperty()
+  isAvailable!: boolean;
+
   @ApiProperty({ nullable: true, type: String })
   avatarUrl!: string | null;
 
@@ -41,6 +67,9 @@ export class ProviderProfileDetailsResponseDto {
 
   @ApiProperty({ type: [ProviderSkillDto] })
   skills!: ProviderSkillDto[];
+
+  @ApiProperty({ type: [ProviderWorkingHourDto] })
+  workingHours!: ProviderWorkingHourDto[];
 
   @ApiProperty()
   createdAt!: Date;
@@ -54,9 +83,14 @@ export class ProviderProfileDetailsResponseDto {
       bio: d.bio,
       rating: d.rating,
       isVerified: d.isVerified,
+      verificationStatus: d.verificationStatus,
+      verificationNote: d.verificationNote,
+      verifiedAt: d.verifiedAt,
+      isAvailable: d.isAvailable,
       avatarUrl: d.avatarUrl,
       user: d.user,
       skills: d.skills,
+      workingHours: d.workingHours,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     };

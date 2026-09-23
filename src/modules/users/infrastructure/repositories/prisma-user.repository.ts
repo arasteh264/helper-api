@@ -164,6 +164,7 @@ export class PrismaUserRepository implements UserRepository {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        role: user.role as unknown as PrismaUserRole,
         status: user.status as unknown as PrismaUserStatus,
         passwordHash: user.passwordHash,
         otpCode: user.otpCode,

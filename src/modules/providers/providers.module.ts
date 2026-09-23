@@ -12,10 +12,12 @@ import { StorageModule } from '../../shared/storage/storage.module';
 import { UploadProviderAvatarUseCase } from './application/upload-provider-avatar.use-case';
 import { RemoveProviderAvatarUseCase } from './application/remove-provider-avatar.use-case';
 import { RemoveSkillFromProviderUseCase } from './application/remove-skill-from-provider.use-case';
+import { AdminProviderController } from './presentation/controllers/admin-provider.controller';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [StorageModule], 
-  controllers: [ProviderProfileController],
+  imports: [StorageModule, UsersModule],
+  controllers: [ProviderProfileController, AdminProviderController],
   providers: [
     CreateProviderProfileUseCase,
     AddSkillToProviderUseCase,

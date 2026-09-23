@@ -17,6 +17,18 @@ export class ProviderProfileResponseDto {
   @ApiProperty()
   isVerified!: boolean;
 
+  @ApiProperty({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
+  verificationStatus!: 'PENDING' | 'APPROVED' | 'REJECTED';
+
+  @ApiProperty({ nullable: true })
+  verificationNote!: string | null;
+
+  @ApiProperty({ nullable: true, type: Date })
+  verifiedAt!: Date | null;
+
+  @ApiProperty()
+  isAvailable!: boolean;
+
   @ApiProperty({ type: [String] })
   skillIds!: string[];
 
@@ -27,6 +39,10 @@ export class ProviderProfileResponseDto {
     dto.bio = profile.bio;
     dto.rating = profile.rating;
     dto.isVerified = profile.isVerified;
+    dto.verificationStatus = profile.verificationStatus;
+    dto.verificationNote = profile.verificationNote;
+    dto.verifiedAt = profile.verifiedAt;
+    dto.isAvailable = profile.isAvailable;
     dto.skillIds = profile.skillIds;
     return dto;
   }

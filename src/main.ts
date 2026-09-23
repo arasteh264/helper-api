@@ -7,8 +7,22 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const configuredOrigins = [
+    'https://helper-customer.vercel.app',
+    ...(process.env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  ];
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'https://helper-customer.vercel.app'],
+    origin: (origin, callback) => {
+      const isLocalOrigin =
+        /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin ?? '');
+      const isAllowedOrigin =
+        !origin || isLocalOrigin || configuredOrigins.includes(origin);
+      callback(null, isAllowedOrigin);
+    },
     credentials: true,
   });
   app.useGlobalPipes(
@@ -36,7 +50,7 @@ async function bootstrap() {
     ],
   });
 
-  const port = process.env.PORT ?? 3001;
+  const port = process.env.PORT ?? 3005;
   await app.listen(port);
 
   console.log(`🚀 Application is running on: http://localhost:${port}`);

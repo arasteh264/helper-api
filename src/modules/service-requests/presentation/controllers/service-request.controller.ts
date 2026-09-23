@@ -11,6 +11,7 @@ import {
   FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import 'multer';
 import {
   ApiBearerAuth,
   ApiOperation,

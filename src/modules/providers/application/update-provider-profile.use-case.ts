@@ -10,11 +10,35 @@ export class UpdateProviderProfileUseCase {
     private readonly providerProfileRepository: ProviderProfileRepository,
   ) {}
 
-  async execute(userId: string, dto: { bio?: string }) {
+  async execute(
+    userId: string,
+    dto: {
+      bio?: string;
+      isAvailable?: boolean;
+      workingHours?: Array<{
+        dayOfWeek: number;
+        isActive: boolean;
+        startTime: string;
+        endTime: string;
+      }>;
+    },
+  ) {
     const profile = await this.providerProfileRepository.findByUserId(userId);
     if (!profile) throw new NotFoundException('Provider profile not found');
 
     if (dto.bio !== undefined) profile.updateBio(dto.bio);
+    if (dto.isAvailable !== undefined) profile.setAvailability(dto.isAvailable);
+    if (dto.workingHours) {
+      profile.setWorkingHours(
+        dto.workingHours.map((hour) => ({
+          dayOfWeek: hour.dayOfWeek,
+          isActive: hour.isActive,
+          startTime: hour.startTime,
+          endTime: hour.endTime,
+        })),
+      );
+    }
+
     await this.providerProfileRepository.update(profile);
 
     const details =

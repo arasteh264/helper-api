@@ -17,6 +17,8 @@ import { EMAIL_SENDER } from './domain/services/email-sender.token';
 import { NodemailerEmailSender } from './infrastructure/services/nodemailer-email-sender';
 import { SmsModule } from '../sms/sms.module';
 import { KavenegarOtpSender } from './infrastructure/services/kavenegar-otp-sender';
+import { ChangePasswordUseCase } from './application/change-password.use-case';
+import { CustomerPasswordController } from './presentation/controllers/customer-password.controller';
 
 @Module({
   imports: [
@@ -30,13 +32,14 @@ import { KavenegarOtpSender } from './infrastructure/services/kavenegar-otp-send
       },
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, CustomerPasswordController],
   providers: [
     LoginUseCase,
     RequestOtpUseCase,
     VerifyOtpUseCase,
     ForgotPasswordUseCase,
     ResetPasswordUseCase,
+    ChangePasswordUseCase,
     JwtStrategy,
     {
       provide: TOKEN_GENERATOR,
