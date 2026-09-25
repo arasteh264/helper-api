@@ -14,6 +14,7 @@ import { RemoveProviderAvatarUseCase } from './application/remove-provider-avata
 import { RemoveSkillFromProviderUseCase } from './application/remove-skill-from-provider.use-case';
 import { AdminProviderController } from './presentation/controllers/admin-provider.controller';
 import { UsersModule } from '../users/users.module';
+import { GetApprovedProvidersUseCase } from './application/get-approved-providers.use-case';
 
 @Module({
   imports: [StorageModule, UsersModule],
@@ -22,6 +23,7 @@ import { UsersModule } from '../users/users.module';
     CreateProviderProfileUseCase,
     AddSkillToProviderUseCase,
     GetMyProviderProfileUseCase,
+    GetApprovedProvidersUseCase,
     UpdateProviderProfileUseCase,
     RemoveSkillFromProviderUseCase,
     UploadProviderAvatarUseCase,
