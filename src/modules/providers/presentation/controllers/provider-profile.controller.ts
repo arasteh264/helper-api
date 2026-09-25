@@ -13,8 +13,10 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
 } from '@nestjs/common';
+
 import { FileInterceptor } from '@nestjs/platform-express';
 import 'multer';
+
 import {
   ApiBearerAuth,
   ApiBody,
@@ -22,20 +24,23 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
+
 import { CreateProviderProfileUseCase } from '../../application/create-provider-profile.use-case';
 import { AddSkillToProviderUseCase } from '../../application/dd-skill-to-provider.use-case';
 import { GetMyProviderProfileUseCase } from '../../application/get-my-provider-profile.use-case';
+import { GetApprovedProvidersUseCase } from '../../application/get-approved-providers.use-case';
 import { UpdateProviderProfileUseCase } from '../../application/update-provider-profile.use-case';
 import { RemoveSkillFromProviderUseCase } from '../../application/remove-skill-from-provider.use-case';
 import { UploadProviderAvatarUseCase } from '../../application/upload-provider-avatar.use-case';
-import { CreateProviderProfileDto } from '../../application/dto/create-provider-profile.dto';
+import { RemoveProviderAvatarUseCase } from '../../application/remove-provider-avatar.use-case';
 
+import { CreateProviderProfileDto } from '../../application/dto/create-provider-profile.dto';
 import { AddSkillDto } from '../../application/dto/add-skill.dto';
 import { ProviderProfileResponseDto } from '../../application/dto/provider-profile-response.dto';
-import { RemoveProviderAvatarUseCase } from '../../application/remove-provider-avatar.use-case';
 import { UpdateProviderProfileDto } from '../../application/dto/update-provider-profile.dto';
 
 @ApiTags('Providers')
@@ -47,11 +52,18 @@ export class ProviderProfileController {
     private readonly createProviderProfileUseCase: CreateProviderProfileUseCase,
     private readonly addSkillToProviderUseCase: AddSkillToProviderUseCase,
     private readonly getMyProfileUseCase: GetMyProviderProfileUseCase,
+    private readonly getApprovedProvidersUseCase: GetApprovedProvidersUseCase,
     private readonly updateProfileUseCase: UpdateProviderProfileUseCase,
     private readonly removeSkillUseCase: RemoveSkillFromProviderUseCase,
     private readonly uploadAvatarUseCase: UploadProviderAvatarUseCase,
     private readonly removeAvatarUseCase: RemoveProviderAvatarUseCase,
   ) {}
+
+  @ApiOperation({ summary: 'Get all approved providers' })
+  @Get()
+  getAllProviders() {
+    return this.getApprovedProvidersUseCase.execute();
+  }
 
   @ApiOperation({ summary: 'Become a provider (create provider profile)' })
   @Post('profile')
@@ -63,6 +75,7 @@ export class ProviderProfileController {
       currentUser.userId,
       dto.bio ?? null,
     );
+
     return ProviderProfileResponseDto.fromEntity(profile);
   }
 
@@ -91,6 +104,7 @@ export class ProviderProfileController {
       currentUser.userId,
       dto.skillName,
     );
+
     return { message: 'Skill added successfully' };
   }
 
@@ -101,6 +115,7 @@ export class ProviderProfileController {
     @Param('skillId') skillId: string,
   ) {
     await this.removeSkillUseCase.execute(currentUser.userId, skillId);
+
     return { message: 'Skill removed' };
   }
 
@@ -109,7 +124,12 @@ export class ProviderProfileController {
   @ApiBody({
     schema: {
       type: 'object',
-      properties: { file: { type: 'string', format: 'binary' } },
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
     },
   })
   @Post('profile/avatar')
@@ -119,20 +139,28 @@ export class ProviderProfileController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
+          new MaxFileSizeValidator({
+            maxSize: 5 * 1024 * 1024,
+          }),
+          new FileTypeValidator({
+            fileType: /(jpg|jpeg|png|webp)$/,
+          }),
         ],
       }),
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadAvatarUseCase.execute(currentUser.userId, file.buffer);
+    return this.uploadAvatarUseCase.execute(
+      currentUser.userId,
+      file.buffer,
+    );
   }
 
   @ApiOperation({ summary: 'Remove my avatar' })
   @Delete('profile/avatar')
   async removeAvatar(@CurrentUser() currentUser: TokenPayload) {
     await this.removeAvatarUseCase.execute(currentUser.userId);
+
     return { message: 'Avatar removed' };
   }
 }

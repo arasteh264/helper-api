@@ -98,10 +98,12 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
 
-npx prisma studio
+<!-- npx prisma studio -->
 
 
 
 
 <!-- watching table 
 npx prisma studio -->
+admin@admin.com
+09198777391@H

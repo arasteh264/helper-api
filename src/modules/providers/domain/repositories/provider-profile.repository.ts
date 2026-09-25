@@ -22,15 +22,27 @@ export interface ProviderProfileDetails {
   workingHours: ProviderWorkingHourSlot[];
 }
 
+
 export interface ProviderProfileRepository {
   save(profile: ProviderProfile): Promise<void>;
   update(profile: ProviderProfile): Promise<void>;
+
   findByUserId(userId: string): Promise<ProviderProfile | null>;
   findById(id: string): Promise<ProviderProfile | null>;
-  findDetailsByUserId(userId: string): Promise<ProviderProfileDetails | null>;
-  findMatchingBySkillIds(skillIds: string[]): Promise<ProviderProfile[]>;
+
+  findDetailsByUserId(
+    userId: string,
+  ): Promise<ProviderProfileDetails | null>;
+
+  findMatchingBySkillIds(
+    skillIds: string[],
+  ): Promise<ProviderProfile[]>;
+
   findByVerificationStatus(
     status: ProviderVerificationStatus,
   ): Promise<ProviderProfile[]>;
+
   findAllApproved(): Promise<ProviderProfile[]>;
+
+findAllApprovedDetails(): Promise<ProviderProfileDetails[]>;
 }

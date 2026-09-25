@@ -87,7 +87,19 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
 
     return profile ? this.toDomain(profile) : null;
   }
+async findAllApproved(): Promise<ProviderProfile[]> {
+  const rows = await this.prisma.providerProfile.findMany({
+    where: {
+      verificationStatus: 'APPROVED' as any,
+    },
+    include: {
+      skills: true,
+      workingHours: true,
+    },
+  });
 
+  return rows.map((row) => this.toDomain(row));
+}
   async findById(id: string): Promise<ProviderProfile | null> {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { id },
@@ -159,14 +171,60 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     return rows.map((row) => this.toDomain(row));
   }
 
-  async findAllApproved(): Promise<ProviderProfile[]> {
-    const rows = await this.prisma.providerProfile.findMany({
-      where: { verificationStatus: 'APPROVED' as any },
-      include: { skills: true, workingHours: true },
-    });
+async findAllApprovedDetails(): Promise<ProviderProfileDetails[]> {
+  const rows = await this.prisma.providerProfile.findMany({
+    where: {
+      verificationStatus: 'APPROVED' as any,
+    },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+      skills: {
+        include: {
+          skill: true,
+        },
+      },
+      workingHours: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
 
-    return rows.map((row) => this.toDomain(row));
-  }
+  return rows.map((p) => ({
+    id: p.id,
+    userId: p.userId,
+    bio: p.bio,
+    rating: p.rating,
+    isVerified: p.isVerified,
+    verificationStatus: p.verificationStatus as any,
+    verificationNote: p.verificationNote,
+    verifiedAt: p.verifiedAt,
+    isAvailable: p.isAvailable,
+    avatarUrl: p.avatarUrl,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+
+    user: p.user,
+
+    skills: p.skills.map((s) => ({
+      id: s.skill.id,
+      name: s.skill.name,
+    })),
+
+    workingHours: p.workingHours.map((hour) => ({
+      dayOfWeek: hour.dayOfWeek,
+      isActive: hour.isActive,
+      startTime: hour.startTime,
+      endTime: hour.endTime,
+    })),
+  }));
+}
 
   private toDomain(profile: {
     id: string;

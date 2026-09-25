@@ -8,6 +8,7 @@ export class UserResponseDto {
     public readonly phone: string,
     public readonly role: string,
     public readonly status: string,
+    public readonly createdAt: Date,
   ) {}
 
   static fromEntity(user: User): UserResponseDto {
@@ -18,6 +19,7 @@ export class UserResponseDto {
       user.phone,
       user.role,
       user.status,
+      user.createdAt
     );
   }
 }

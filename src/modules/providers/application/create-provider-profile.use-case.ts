@@ -20,26 +20,24 @@ export class CreateProviderProfileUseCase {
     private readonly userRepository: userRepository.UserRepository,
   ) {}
 
-  async execute(userId: string, bio: string | null): Promise<ProviderProfile> {
-    const existing = await this.providerProfileRepository.findByUserId(userId);
+async execute(userId: string, bio: string | null): Promise<ProviderProfile> {
+  const existing = await this.providerProfileRepository.findByUserId(userId);
+console.log(existing);
 
-    if (existing) {
-      throw new ConflictException(
-        'Provider profile already exists for this user',
-      );
-    }
-
-    const user = await this.userRepository.findById(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    user.setRole(UserRole.PROVIDER);
-    await this.userRepository.update(user);
-
-    const profile = ProviderProfile.create(userId, bio);
-    await this.providerProfileRepository.save(profile);
-
-    return profile;
+  if (existing) {
+    throw new ConflictException(
+      'Provider profile already exists for this user',
+    );
   }
+
+  const user = await this.userRepository.findById(userId);
+  if (!user) {
+    throw new NotFoundException('User not found');
+  }
+
+  const profile = ProviderProfile.create(userId, bio);
+  await this.providerProfileRepository.save(profile);
+
+  return profile;
+}
 }
