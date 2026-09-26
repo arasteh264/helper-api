@@ -1,8 +1,8 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import * as userRepository from "../domain/repositories/user.repository";
-import { USER_REPOSITORY } from "../domain/repositories/user.repository.token";
-import { User } from "../domain/entities/user.entity"; 
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { UpdateUserDto } from './dto/update-user.dto';
+import * as userRepository from '../domain/repositories/user.repository';
+import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
+import { User } from '../domain/entities/user.entity';
 
 @Injectable()
 export class UpdateUserUseCase {
@@ -12,20 +12,20 @@ export class UpdateUserUseCase {
   ) {}
 
   async execute(id: string, dto: UpdateUserDto): Promise<User> {
-  const user = await this.userRepository.findById(id);
+    const user = await this.userRepository.findById(id);
 
-  if (!user) {
-    throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.updateProfile(dto.name, dto.phone);
+
+    if (dto.email !== undefined) {
+      user.changeEmail(dto.email);
+    }
+
+    await this.userRepository.update(user);
+
+    return user;
   }
-
-  user.updateProfile(dto.name, dto.phone);
-
-  if (dto.email !== undefined) {
-    user.changeEmail(dto.email);
-  }
-
-  await this.userRepository.update(user);
-
-  return user;
-}
 }

@@ -18,10 +18,9 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
   ): Promise<PaginatedResult<ServiceRequest>> {
     const where: any = {};
 
-    if (f.status) where.status = f.status as unknown as any;
+    if (f.status) where.status = f.status;
     if (f.customerId) where.customerId = f.customerId;
-    if (f.preferredTime)
-      where.preferredTime = f.preferredTime as unknown as any;
+    if (f.preferredTime) where.preferredTime = f.preferredTime;
 
     if (f.search) {
       where.OR = [

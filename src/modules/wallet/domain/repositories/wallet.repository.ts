@@ -3,10 +3,10 @@ import type { WalletTransactionType } from '../entities/wallet-transaction-type'
 
 export interface WalletSummary {
   id: string;
-  balance: number;          
+  balance: number;
   totalEarned: number;
   totalWithdrawn: number;
-  pendingPayouts: number;   
+  pendingPayouts: number;
 }
 
 export interface WalletTransactionView {
@@ -32,7 +32,7 @@ export interface ListWalletTransactionsFilter {
   pageSize: number;
   search?: string;
   type?: WalletTransactionType;
-  direction?: 'in' | 'out'; 
+  direction?: 'in' | 'out';
   createdFrom?: Date;
   createdTo?: Date;
   sortOrder: 'asc' | 'desc';
@@ -40,7 +40,7 @@ export interface ListWalletTransactionsFilter {
 
 export interface CreditWalletInput {
   providerProfileId: string;
-  amount: number; 
+  amount: number;
   type: 'EARNING' | 'ADJUSTMENT';
   description?: string;
   serviceRequestId?: string;

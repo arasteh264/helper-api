@@ -6,4 +6,5 @@ export const WalletTransactionType = {
 } as const;
 
 export type WalletTransactionType =
-  (typeof WalletTransactionType)[keyof typeof WalletTransactionType];export const WALLET_REPOSITORY = Symbol('WALLET_REPOSITORY');
+  (typeof WalletTransactionType)[keyof typeof WalletTransactionType];
+export const WALLET_REPOSITORY = Symbol('WALLET_REPOSITORY');

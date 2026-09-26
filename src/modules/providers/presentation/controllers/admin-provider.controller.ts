@@ -1,17 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AdminGuard } from '../../../auth/presentation/guards/admin.guard';
@@ -26,7 +15,9 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 
 import { ProviderProfileDetailsResponseDto } from '../../application/dto/provider-profile-details-response.dto';
 import { ProviderVerificationStatus } from 'generated/prisma/enums';
-
+import { GetProviderDocumentsForReviewUseCase } from '../../application/get-provider-documents-for-review.use-case';
+import { ReviewProviderDocumentUseCase } from '../../application/review-provider-document.use-case';
+import { ReviewProviderDocumentDto } from '../../application/dto/review-provider-document.dto';
 
 class ReviewProviderDto {
   status!: 'APPROVED' | 'REJECTED';
@@ -41,6 +32,8 @@ export class AdminProviderController {
   constructor(
     @Inject(PROVIDER_PROFILE_REPOSITORY)
     private readonly providerProfileRepository: ProviderProfileRepository,
+     private readonly getProviderDocumentsForReviewUseCase: GetProviderDocumentsForReviewUseCase,
+    private readonly reviewProviderDocumentUseCase: ReviewProviderDocumentUseCase,
   ) {}
 
   @ApiOperation({
@@ -55,22 +48,16 @@ export class AdminProviderController {
 
     const details = await Promise.all(
       providers.map((profile) =>
-        this.providerProfileRepository.findDetailsByUserId(
-          profile.userId,
-        ),
+        this.providerProfileRepository.findDetailsByUserId(profile.userId),
       ),
     );
 
     return details
       .filter(
-        (
-          provider,
-        ): provider is NonNullable<typeof provider> =>
+        (provider): provider is NonNullable<typeof provider> =>
           provider !== null,
       )
-      .map((provider) =>
-        ProviderProfileDetailsResponseDto.from(provider),
-      );
+      .map((provider) => ProviderProfileDetailsResponseDto.from(provider));
   }
 
   @ApiOperation({
@@ -82,8 +69,7 @@ export class AdminProviderController {
     @Param('providerId') providerId: string,
     @Body() dto: ReviewProviderDto,
   ) {
-    const profile =
-      await this.providerProfileRepository.findById(providerId);
+    const profile = await this.providerProfileRepository.findById(providerId);
 
     if (!profile) {
       throw new Error('Provider profile not found');
@@ -93,11 +79,28 @@ export class AdminProviderController {
 
     await this.providerProfileRepository.update(profile);
 
-    const details =
-      await this.providerProfileRepository.findDetailsByUserId(
-        profile.userId,
-      );
+    const details = await this.providerProfileRepository.findDetailsByUserId(
+      profile.userId,
+    );
 
     return ProviderProfileDetailsResponseDto.from(details!);
+  }
+    @ApiOperation({ summary: 'Get all verification documents of a provider' })
+  @Get(':providerProfileId/documents')
+  getDocuments(@Param('providerProfileId') providerProfileId: string) {
+    return this.getProviderDocumentsForReviewUseCase.execute(providerProfileId);
+  }
+
+  @ApiOperation({ summary: 'Approve or reject a verification document' })
+  @Patch('documents/:documentId/review')
+  reviewDocument(
+    @Param('documentId') documentId: string,
+    @Body() dto: ReviewProviderDocumentDto,
+  ) {
+    return this.reviewProviderDocumentUseCase.execute(
+      documentId,
+      dto.decision,
+      dto.rejectionNote,
+    );
   }
 }

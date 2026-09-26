@@ -92,7 +92,10 @@ export class AdminListServiceRequestsQueryDto extends PaginationQueryDto {
   @IsDate()
   updatedTo?: Date;
 
-  @ApiPropertyOptional({ enum: SERVICE_REQUEST_SORT_FIELDS, default: 'createdAt' })
+  @ApiPropertyOptional({
+    enum: SERVICE_REQUEST_SORT_FIELDS,
+    default: 'createdAt',
+  })
   @IsOptional()
   @IsIn(SERVICE_REQUEST_SORT_FIELDS)
   sortBy?: (typeof SERVICE_REQUEST_SORT_FIELDS)[number] = 'createdAt';

@@ -19,7 +19,7 @@ export class UserResponseDto {
       user.phone,
       user.role,
       user.status,
-      user.createdAt
+      user.createdAt,
     );
   }
 }

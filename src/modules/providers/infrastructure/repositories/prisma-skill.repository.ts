@@ -6,7 +6,9 @@ import type { SkillRepository } from '../../domain/repositories/skill.repository
 export class PrismaSkillRepository implements SkillRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOrCreateByName(name: string): Promise<{ id: string; name: string }> {
+  async findOrCreateByName(
+    name: string,
+  ): Promise<{ id: string; name: string }> {
     return this.prisma.skill.upsert({
       where: { name },
       update: {},

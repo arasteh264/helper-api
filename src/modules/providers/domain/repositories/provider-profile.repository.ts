@@ -22,7 +22,6 @@ export interface ProviderProfileDetails {
   workingHours: ProviderWorkingHourSlot[];
 }
 
-
 export interface ProviderProfileRepository {
   save(profile: ProviderProfile): Promise<void>;
   update(profile: ProviderProfile): Promise<void>;
@@ -30,13 +29,9 @@ export interface ProviderProfileRepository {
   findByUserId(userId: string): Promise<ProviderProfile | null>;
   findById(id: string): Promise<ProviderProfile | null>;
 
-  findDetailsByUserId(
-    userId: string,
-  ): Promise<ProviderProfileDetails | null>;
+  findDetailsByUserId(userId: string): Promise<ProviderProfileDetails | null>;
 
-  findMatchingBySkillIds(
-    skillIds: string[],
-  ): Promise<ProviderProfile[]>;
+  findMatchingBySkillIds(skillIds: string[]): Promise<ProviderProfile[]>;
 
   findByVerificationStatus(
     status: ProviderVerificationStatus,
@@ -44,5 +39,5 @@ export interface ProviderProfileRepository {
 
   findAllApproved(): Promise<ProviderProfile[]>;
 
-findAllApprovedDetails(): Promise<ProviderProfileDetails[]>;
+  findAllApprovedDetails(): Promise<ProviderProfileDetails[]>;
 }

@@ -10,9 +10,7 @@ import { AdminListServiceRequestsQueryDto } from '../../application/dto/admin-li
 @UseGuards(JwtAuthGuard /*, AdminGuard */)
 @Controller('admin/service-requests')
 export class AdminServiceRequestController {
-  constructor(
-    private readonly listUseCase: AdminListServiceRequestsUseCase,
-  ) {}
+  constructor(private readonly listUseCase: AdminListServiceRequestsUseCase) {}
 
   @ApiOperation({ summary: 'List all service requests (admin)' })
   @Get()
