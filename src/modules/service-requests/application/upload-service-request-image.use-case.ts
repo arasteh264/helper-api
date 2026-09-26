@@ -30,7 +30,9 @@ export class UploadServiceRequestImageUseCase {
     }
 
     if (request.customerId !== currentUserId) {
-      throw new ForbiddenException('You can only upload images to your own requests');
+      throw new ForbiddenException(
+        'You can only upload images to your own requests',
+      );
     }
 
     const uploaded = await this.imageUploader.upload(

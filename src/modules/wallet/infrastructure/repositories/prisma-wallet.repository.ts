@@ -120,14 +120,19 @@ export class PrismaWalletRepository implements WalletRepository {
         });
       });
 
-      return { status: 'CREDITED', transaction: this.toTransactionView(created) };
+      return {
+        status: 'CREDITED',
+        transaction: this.toTransactionView(created),
+      };
     } catch (error: any) {
       if (error?.code === 'P2002') return { status: 'DUPLICATE' };
       throw error;
     }
   }
 
-  async findBankAccountByUserId(userId: string): Promise<BankAccountView | null> {
+  async findBankAccountByUserId(
+    userId: string,
+  ): Promise<BankAccountView | null> {
     const account = await this.prisma.providerBankAccount.findFirst({
       where: { providerProfile: { userId } },
     });

@@ -22,7 +22,9 @@ export class ProviderWalletController {
     private readonly upsertBankAccountUseCase: UpsertBankAccountUseCase,
   ) {}
 
-  @ApiOperation({ summary: 'My wallet summary (balance, totals, pending payouts)' })
+  @ApiOperation({
+    summary: 'My wallet summary (balance, totals, pending payouts)',
+  })
   @Get()
   getSummary(@CurrentUser() user: TokenPayload) {
     return this.getSummaryUseCase.execute(user.userId);

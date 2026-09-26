@@ -9,7 +9,9 @@ export class CreateServiceRequestDto {
   @MaxLength(150)
   title!: string;
 
-  @ApiProperty({ example: 'لوله زیر سینک ظرفشویی نشتی داره و باید سریع تعمیر بشه' })
+  @ApiProperty({
+    example: 'لوله زیر سینک ظرفشویی نشتی داره و باید سریع تعمیر بشه',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)

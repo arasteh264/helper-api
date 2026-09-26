@@ -13,11 +13,11 @@ export class GetAllUserUseCase {
     private readonly userRepository: UserRepository,
   ) {}
 
-async execute(query: PaginationQueryDto): Promise<PaginatedResult<User>> {
-  return this.userRepository.findAll({
-    page: query.page ?? 1,
-    pageSize: query.pageSize ?? 10,
-    search: query.search,
-  });
-}
+  async execute(query: PaginationQueryDto): Promise<PaginatedResult<User>> {
+    return this.userRepository.findAll({
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 10,
+      search: query.search,
+    });
+  }
 }

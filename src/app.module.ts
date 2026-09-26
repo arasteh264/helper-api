@@ -11,7 +11,15 @@ import { StorageModule } from './shared/storage/storage.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 
 @Module({
-  imports: [DatabaseModule, StorageModule, UsersModule, AuthModule, ProvidersModule,ServiceRequestsModule,WalletModule],
+  imports: [
+    DatabaseModule,
+    StorageModule,
+    UsersModule,
+    AuthModule,
+    ProvidersModule,
+    ServiceRequestsModule,
+    WalletModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

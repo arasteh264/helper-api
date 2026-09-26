@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  BadRequestException,
-} from '@nestjs/common';
+import { Inject, Injectable, BadRequestException } from '@nestjs/common';
 import type { UserRepository } from '../../users/domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
 import type { PasswordHasher } from '../../users/domain/services/password-hasher.port';

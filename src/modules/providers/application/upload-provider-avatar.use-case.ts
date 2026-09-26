@@ -14,7 +14,10 @@ export class UploadProviderAvatarUseCase {
     private readonly imageUploader: ImageUploader,
   ) {}
 
-  async execute(userId: string, buffer: Buffer): Promise<{ avatarUrl: string }> {
+  async execute(
+    userId: string,
+    buffer: Buffer,
+  ): Promise<{ avatarUrl: string }> {
     const profile = await this.providerProfileRepository.findByUserId(userId);
     if (!profile) throw new NotFoundException('Provider profile not found');
 

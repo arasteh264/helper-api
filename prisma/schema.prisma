@@ -29,6 +29,8 @@ enum ProviderDocumentType {
   NATIONAL_CARD
   BUSINESS_LICENSE
   CERTIFICATE
+  COMMITMENT_LETTER
+  CRIMINAL_RECORD
   OTHER
 }
 
@@ -80,24 +82,33 @@ model ProviderProfile {
   user        User                 @relation(fields: [userId], references: [id])
   skills      ProviderSkill[]
   documents   ProviderDocument[]
+  portfolioItems PortfolioItem[]
   workingHours ProviderWorkingHour[]
   wallet      Wallet?
   bankAccount ProviderBankAccount?
 }
+enum ProviderDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
 model ProviderDocument {
-  id                String               @id @default(uuid())
-  providerProfileId String
-  type              ProviderDocumentType
-  url               String
-  publicId          String?
-  createdAt         DateTime             @default(now())
+  id                 String                 @id @default(uuid())
+  providerProfileId  String
+  type               ProviderDocumentType
+  url                String
+  publicId           String?
+  status             ProviderDocumentStatus @default(PENDING)
+  rejectionNote      String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
 
+  @@unique([providerProfileId, type])
   @@index([providerProfileId, createdAt])
 }
-
 model ProviderWorkingHour {
   id                String   @id @default(uuid())
   providerProfileId String
@@ -271,4 +282,32 @@ model PayoutRequest {
 
   @@index([walletId, createdAt])
   @@index([status, createdAt])
+}
+
+model PortfolioItem {
+  id                 String   @id @default(uuid())
+  providerProfileId  String
+  title              String?
+  description        String?
+  order              Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  providerProfile ProviderProfile      @relation(fields: [providerProfileId], references: [id])
+  images          PortfolioItemImage[]
+
+  @@index([providerProfileId, order])
+}
+
+model PortfolioItemImage {
+  id              String   @id @default(uuid())
+  portfolioItemId String
+  url             String
+  publicId        String
+  order           Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  portfolioItem PortfolioItem @relation(fields: [portfolioItemId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioItemId, order])
 }
