@@ -17,6 +17,7 @@ export class ServiceRequest {
     private _imageIds: string[],
     public readonly createdAt: Date,
     private _updatedAt: Date,
+    private _scheduledAt: Date | null,
   ) {}
 
   static create(
@@ -42,6 +43,7 @@ export class ServiceRequest {
       [],
       now,
       now,
+      null,
     );
   }
 
@@ -61,6 +63,7 @@ export class ServiceRequest {
     imageIds: string[],
     createdAt: Date,
     updatedAt: Date,
+    scheduledAt: Date | null = null,
   ): ServiceRequest {
     return new ServiceRequest(
       id,
@@ -78,6 +81,7 @@ export class ServiceRequest {
       imageIds,
       createdAt,
       updatedAt,
+      scheduledAt,
     );
   }
 
@@ -117,8 +121,15 @@ export class ServiceRequest {
   get updatedAt(): Date {
     return this._updatedAt;
   }
+  get scheduledAt(): Date | null {
+    return this._scheduledAt;
+  }
 
-  setLocation(address: string, latitude: number, longitude: number): void {
+  setLocation(
+    address: string,
+    latitude: number | null,
+    longitude: number | null,
+  ): void {
     this._address = address;
     this._latitude = latitude;
     this._longitude = longitude;
@@ -136,6 +147,11 @@ export class ServiceRequest {
 
   setPreferredTime(preferredTime: PreferredTime): void {
     this._preferredTime = preferredTime;
+    this._updatedAt = new Date();
+  }
+
+  setScheduledAt(scheduledAt: Date | null): void {
+    this._scheduledAt = scheduledAt;
     this._updatedAt = new Date();
   }
 

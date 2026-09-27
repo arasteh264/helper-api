@@ -19,17 +19,50 @@ export class UpsertBankAccountUseCase {
     userId: string,
     dto: { holderName: string; sheba: string; bankName?: string },
   ) {
+    return this.upsert(
+      () =>
+        this.walletRepository.upsertBankAccount(userId, this.toBankData(dto)),
+      dto,
+    );
+  }
+
+  async executeForProviderProfile(
+    providerProfileId: string,
+    dto: { holderName: string; sheba: string; bankName?: string },
+  ) {
+    return this.upsert(
+      () =>
+        this.walletRepository.upsertBankAccountByProviderProfileId(
+          providerProfileId,
+          this.toBankData(dto),
+        ),
+      dto,
+    );
+  }
+
+  private async upsert(
+    save: () => ReturnType<WalletRepository['upsertBankAccount']>,
+    dto: { holderName: string; sheba: string; bankName?: string },
+  ) {
     if (!isValidSheba(dto.sheba)) {
       throw new BadRequestException('Invalid Sheba number');
     }
 
-    const account = await this.walletRepository.upsertBankAccount(userId, {
-      holderName: dto.holderName.trim(),
-      sheba: dto.sheba,
-      bankName: dto.bankName?.trim() || null,
-    });
+    const account = await save();
     if (!account) throw new NotFoundException('Provider profile not found');
 
     return account;
+  }
+
+  private toBankData(dto: {
+    holderName: string;
+    sheba: string;
+    bankName?: string;
+  }) {
+    return {
+      holderName: dto.holderName.trim(),
+      sheba: dto.sheba,
+      bankName: dto.bankName?.trim() || null,
+    };
   }
 }

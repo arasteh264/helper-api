@@ -14,4 +14,10 @@ export class GetBankAccountUseCase {
     if (!account) throw new NotFoundException('Bank account not set');
     return account;
   }
+
+  executeForProviderProfile(providerProfileId: string) {
+    return this.walletRepository.findBankAccountByProviderProfileId(
+      providerProfileId,
+    );
+  }
 }

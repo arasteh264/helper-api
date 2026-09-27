@@ -7,6 +7,9 @@ export interface WalletSummary {
   totalEarned: number;
   totalWithdrawn: number;
   pendingPayouts: number;
+  commissionRate: number;
+  minWithdrawal: number;
+  monthly: { label: string; amount: number }[];
 }
 
 export interface WalletTransactionView {
@@ -18,6 +21,7 @@ export interface WalletTransactionView {
   serviceRequestId: string | null;
   payoutRequestId: string | null;
   createdAt: Date;
+  payoutStatus: 'PENDING' | 'PAID' | 'REJECTED' | 'CANCELLED' | null;
 }
 
 export interface BankAccountView {
@@ -67,4 +71,32 @@ export interface WalletRepository {
     userId: string,
     data: { holderName: string; sheba: string; bankName: string | null },
   ): Promise<BankAccountView | null>;
+
+  findBankAccountByProviderProfileId(
+    providerProfileId: string,
+  ): Promise<BankAccountView | null>;
+
+  upsertBankAccountByProviderProfileId(
+    providerProfileId: string,
+    data: { holderName: string; sheba: string; bankName: string | null },
+  ): Promise<BankAccountView | null>;
+
+  getConfiguration(): Promise<{
+    commissionRate: number;
+    minWithdrawal: number;
+  }>;
+
+  updateCommissionRate(
+    rate: number,
+  ): Promise<{ commissionRate: number; minWithdrawal: number }>;
+
+  createPayoutRequest(
+    userId: string,
+    amount: number,
+  ): Promise<{
+    id: string;
+    amount: number;
+    status: string;
+    createdAt: Date;
+  }>;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
@@ -6,9 +6,9 @@ import type { TokenPayload } from '../../../auth/domain/services/token-generator
 import { GetWalletSummaryUseCase } from '../../application/get-wallet-summary.use-case';
 import { ListWalletTransactionsUseCase } from '../../application/list-wallet-transactions.use-case';
 import { GetBankAccountUseCase } from '../../application/get-bank-account.use-case';
-import { UpsertBankAccountUseCase } from '../../application/upsert-bank-account.use-case';
 import { ListWalletTransactionsQueryDto } from '../../application/dto/list-wallet-transactions-query.dto';
-import { UpsertBankAccountDto } from '../../application/dto/upsert-bank-account.dto';
+import { CreatePayoutRequestUseCase } from '../../application/create-payout-request.use-case';
+import { CreatePayoutRequestDto } from '../../application/dto/create-payout-request.dto';
 
 @ApiTags('Provider Wallet')
 @ApiBearerAuth()
@@ -19,7 +19,7 @@ export class ProviderWalletController {
     private readonly getSummaryUseCase: GetWalletSummaryUseCase,
     private readonly listTransactionsUseCase: ListWalletTransactionsUseCase,
     private readonly getBankAccountUseCase: GetBankAccountUseCase,
-    private readonly upsertBankAccountUseCase: UpsertBankAccountUseCase,
+    private readonly createPayoutRequestUseCase: CreatePayoutRequestUseCase,
   ) {}
 
   @ApiOperation({
@@ -54,12 +54,12 @@ export class ProviderWalletController {
     return this.getBankAccountUseCase.execute(user.userId);
   }
 
-  @ApiOperation({ summary: 'Set or update my payout bank account' })
-  @Put('bank-account')
-  upsertBankAccount(
+  @ApiOperation({ summary: 'Request a wallet withdrawal' })
+  @Post('payouts')
+  createPayoutRequest(
     @CurrentUser() user: TokenPayload,
-    @Body() dto: UpsertBankAccountDto,
+    @Body() dto: CreatePayoutRequestDto,
   ) {
-    return this.upsertBankAccountUseCase.execute(user.userId, dto);
+    return this.createPayoutRequestUseCase.execute(user.userId, dto.amount);
   }
 }

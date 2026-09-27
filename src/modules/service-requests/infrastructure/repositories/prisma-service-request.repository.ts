@@ -71,22 +71,33 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
     );
   }
   async save(request: ServiceRequest): Promise<void> {
-    await this.prisma.serviceRequest.create({
-      data: {
-        id: request.id,
-        customerId: request.customerId,
-        title: request.title,
-        description: request.description,
-        status: request.status as unknown as any,
-        address: request.address,
-        latitude: request.latitude,
-        longitude: request.longitude,
-        budgetMin: request.budgetMin,
-        budgetMax: request.budgetMax,
-        preferredTime: request.preferredTime as unknown as any,
-        createdAt: request.createdAt,
-        updatedAt: request.updatedAt,
-      },
+    await this.prisma.$transaction(async (db) => {
+      await db.serviceRequest.create({
+        data: {
+          id: request.id,
+          customerId: request.customerId,
+          title: request.title,
+          description: request.description,
+          status: request.status as unknown as any,
+          address: request.address,
+          latitude: request.latitude,
+          longitude: request.longitude,
+          budgetMin: request.budgetMin,
+          budgetMax: request.budgetMax,
+          preferredTime: request.preferredTime as unknown as any,
+          scheduledAt: request.scheduledAt,
+          createdAt: request.createdAt,
+          updatedAt: request.updatedAt,
+        },
+      });
+      if (request.skillIds.length) {
+        await db.serviceRequestSkill.createMany({
+          data: request.skillIds.map((skillId) => ({
+            serviceRequestId: request.id,
+            skillId,
+          })),
+        });
+      }
     });
   }
 
@@ -103,6 +114,7 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
         budgetMin: request.budgetMin,
         budgetMax: request.budgetMax,
         preferredTime: request.preferredTime as unknown as any,
+        scheduledAt: request.scheduledAt,
         updatedAt: request.updatedAt,
       },
     });
@@ -194,6 +206,7 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
       record.images.map((img: any) => img.id),
       record.createdAt,
       record.updatedAt,
+      record.scheduledAt ?? null,
     );
   }
 }

@@ -4,12 +4,19 @@ import { PrismaClient } from '../../../generated/prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient {
-  providerBankAccount: any;
   constructor() {
-    console.log(process.env.DATABASE_URL);
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is required');
+    }
+
+    const databaseUrl = new URL(connectionString);
+    if (databaseUrl.searchParams.get('sslmode') === 'require') {
+      databaseUrl.searchParams.set('uselibpqcompat', 'true');
+    }
 
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL as string,
+      connectionString: databaseUrl.toString(),
     });
 
     super({ adapter });

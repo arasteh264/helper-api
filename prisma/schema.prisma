@@ -74,6 +74,8 @@ model ProviderProfile {
   verificationNote   String?
   verifiedAt         DateTime?
   isAvailable        Boolean @default(false)
+  serviceAreaLatitude Float?
+  serviceAreaLongitude Float?
   avatarUrl      String?
   avatarPublicId String?
   createdAt      DateTime @default(now())
@@ -83,6 +85,9 @@ model ProviderProfile {
   skills      ProviderSkill[]
   documents   ProviderDocument[]
   portfolioItems PortfolioItem[]
+  acceptedServiceRequests ServiceRequest[] @relation("AcceptedServiceRequests")
+  requestDeclines ProviderRequestDecline[]
+  requestInvitations ProviderRequestInvitation[]
   workingHours ProviderWorkingHour[]
   wallet      Wallet?
   bankAccount ProviderBankAccount?
@@ -163,6 +168,7 @@ enum PreferredTime {
 model ServiceRequest {
   id          String               @id @default(uuid())
   customerId  String
+  acceptedProviderProfileId String?
   title       String
   description String
   status      ServiceRequestStatus @default(OPEN)
@@ -174,12 +180,30 @@ model ServiceRequest {
   budgetMin     Float?
   budgetMax     Float?
   preferredTime PreferredTime?
+  scheduledAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   skills ServiceRequestSkill[]
   images ServiceRequestImage[]
+  acceptedProviderProfile ProviderProfile? @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
+  providerDeclines ProviderRequestDecline[]
+  invitations ProviderRequestInvitation[]
+
+  @@index([acceptedProviderProfileId, status])
+}
+
+model ProviderRequestDecline {
+  providerProfileId String
+  serviceRequestId  String
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@id([providerProfileId, serviceRequestId])
+  @@index([serviceRequestId])
 }
 
 model ServiceRequestSkill {
@@ -204,6 +228,7 @@ model ServiceRequestImage {
 
 enum WalletTransactionType {
   EARNING // واریز بابت کار انجام‌شده
+  COMMISSION // کارمزد کسرشده توسط پلتفرم
   PAYOUT_REQUEST // کسر موجودی بابت درخواست برداشت
   PAYOUT_REFUND // برگشت پول درخواست رد یا لغو شده
   ADJUSTMENT // اصلاح دستی توسط ادمین
@@ -310,4 +335,34 @@ model PortfolioItemImage {
   portfolioItem PortfolioItem @relation(fields: [portfolioItemId], references: [id], onDelete: Cascade)
 
   @@index([portfolioItemId, order])
+}
+
+model WalletConfiguration {
+  id             String   @id @default("global")
+  commissionRate Float    @default(10)
+  minWithdrawal  Int      @default(100000)
+  updatedAt      DateTime @updatedAt
+}
+
+enum ProviderInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+model ProviderRequestInvitation {
+  id                String @id @default(uuid())
+  providerProfileId String
+  serviceRequestId  String
+  status            ProviderInvitationStatus @default(PENDING)
+  createdAt         DateTime @default(now())
+  respondedAt       DateTime?
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([providerProfileId, serviceRequestId])
+  @@index([providerProfileId, status, createdAt])
+  @@index([serviceRequestId, status])
 }

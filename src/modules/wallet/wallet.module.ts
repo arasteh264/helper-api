@@ -6,6 +6,11 @@ import { ListWalletTransactionsUseCase } from './application/list-wallet-transac
 import { GetBankAccountUseCase } from './application/get-bank-account.use-case';
 import { UpsertBankAccountUseCase } from './application/upsert-bank-account.use-case';
 import { CreditProviderWalletUseCase } from './application/credit-provider-wallet.use-case';
+import { CreatePayoutRequestUseCase } from './application/create-payout-request.use-case';
+import {
+  GetWalletConfigurationUseCase,
+  UpdateWalletCommissionRateUseCase,
+} from './application/wallet-configuration.use-cases';
 import { WALLET_REPOSITORY } from './domain/repositories/wallet.repository.token';
 import { PrismaWalletRepository } from './infrastructure/repositories/prisma-wallet.repository';
 
@@ -17,6 +22,9 @@ import { PrismaWalletRepository } from './infrastructure/repositories/prisma-wal
     GetBankAccountUseCase,
     UpsertBankAccountUseCase,
     CreditProviderWalletUseCase,
+    CreatePayoutRequestUseCase,
+    GetWalletConfigurationUseCase,
+    UpdateWalletCommissionRateUseCase,
     { provide: WALLET_REPOSITORY, useClass: PrismaWalletRepository },
   ],
   exports: [CreditProviderWalletUseCase],

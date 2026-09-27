@@ -15,6 +15,8 @@ export class UpdateProviderProfileUseCase {
     dto: {
       bio?: string;
       isAvailable?: boolean;
+      serviceAreaLatitude?: number | null;
+      serviceAreaLongitude?: number | null;
       workingHours?: Array<{
         dayOfWeek: number;
         isActive: boolean;
@@ -28,6 +30,15 @@ export class UpdateProviderProfileUseCase {
 
     if (dto.bio !== undefined) profile.updateBio(dto.bio);
     if (dto.isAvailable !== undefined) profile.setAvailability(dto.isAvailable);
+    if (
+      dto.serviceAreaLatitude !== undefined ||
+      dto.serviceAreaLongitude !== undefined
+    ) {
+      profile.setServiceArea(
+        dto.serviceAreaLatitude ?? profile.serviceAreaLatitude,
+        dto.serviceAreaLongitude ?? profile.serviceAreaLongitude,
+      );
+    }
     if (dto.workingHours) {
       profile.setWorkingHours(
         dto.workingHours.map((hour) => ({

@@ -29,10 +29,18 @@ import { UploadProviderDocumentUseCase } from './application/upload-provider-doc
 import { GetMyDocumentsUseCase } from './application/get-my-documents.use-case';
 import { GetProviderDocumentsForReviewUseCase } from './application/get-provider-documents-for-review.use-case';
 import { ReviewProviderDocumentUseCase } from './application/review-provider-document.use-case';
+import { ProviderJobsController } from './presentation/controllers/provider-jobs.controller';
+import { ProviderJobsUseCase } from './application/provider-jobs.use-case';
+import { PublicProvidersController } from './presentation/controllers/public-providers.controller';
 
 @Module({
   imports: [StorageModule, UsersModule],
-  controllers: [ProviderProfileController, AdminProviderController],
+  controllers: [
+    ProviderProfileController,
+    AdminProviderController,
+    ProviderJobsController,
+    PublicProvidersController,
+  ],
   providers: [
     CreateProviderProfileUseCase,
     AddSkillToProviderUseCase,
@@ -51,6 +59,7 @@ import { ReviewProviderDocumentUseCase } from './application/review-provider-doc
     GetMyDocumentsUseCase,
     GetProviderDocumentsForReviewUseCase,
     ReviewProviderDocumentUseCase,
+    ProviderJobsUseCase,
     {
       provide: PROVIDER_PROFILE_REPOSITORY,
       useClass: PrismaProviderProfileRepository,

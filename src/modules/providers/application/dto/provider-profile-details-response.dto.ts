@@ -62,6 +62,12 @@ export class ProviderProfileDetailsResponseDto {
   @ApiProperty({ nullable: true, type: String })
   avatarUrl!: string | null;
 
+  @ApiProperty({ nullable: true, type: Number })
+  serviceAreaLatitude!: number | null;
+
+  @ApiProperty({ nullable: true, type: Number })
+  serviceAreaLongitude!: number | null;
+
   @ApiProperty({ type: ProviderUserDto })
   user!: ProviderUserDto;
 
@@ -88,6 +94,8 @@ export class ProviderProfileDetailsResponseDto {
       verifiedAt: d.verifiedAt,
       isAvailable: d.isAvailable,
       avatarUrl: d.avatarUrl,
+      serviceAreaLatitude: d.serviceAreaLatitude,
+      serviceAreaLongitude: d.serviceAreaLongitude,
       user: d.user,
       skills: d.skills,
       workingHours: d.workingHours,
