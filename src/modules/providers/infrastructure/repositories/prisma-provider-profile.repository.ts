@@ -27,6 +27,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         isAvailable: profile.isAvailable,
         avatarUrl: profile.avatarUrl,
         avatarPublicId: profile.avatarPublicId,
+        serviceAreaLatitude: profile.serviceAreaLatitude,
+        serviceAreaLongitude: profile.serviceAreaLongitude,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt,
       },
@@ -47,6 +49,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           isAvailable: profile.isAvailable,
           avatarUrl: profile.avatarUrl,
           avatarPublicId: profile.avatarPublicId,
+          serviceAreaLatitude: profile.serviceAreaLatitude,
+          serviceAreaLongitude: profile.serviceAreaLongitude,
           updatedAt: profile.updatedAt,
         },
       }),
@@ -134,6 +138,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       verifiedAt: p.verifiedAt,
       isAvailable: p.isAvailable,
       avatarUrl: p.avatarUrl,
+      serviceAreaLatitude: p.serviceAreaLatitude,
+      serviceAreaLongitude: p.serviceAreaLongitude,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       user: p.user,
@@ -207,6 +213,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       verifiedAt: p.verifiedAt,
       isAvailable: p.isAvailable,
       avatarUrl: p.avatarUrl,
+      serviceAreaLatitude: p.serviceAreaLatitude,
+      serviceAreaLongitude: p.serviceAreaLongitude,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
 
@@ -238,6 +246,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     isAvailable: boolean;
     avatarUrl: string | null;
     avatarPublicId: string | null;
+    serviceAreaLatitude: number | null;
+    serviceAreaLongitude: number | null;
     createdAt: Date;
     updatedAt: Date;
     skills: { skillId: string }[];
@@ -269,6 +279,8 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       profile.updatedAt,
       profile.avatarUrl,
       profile.avatarPublicId,
+      profile.serviceAreaLatitude,
+      profile.serviceAreaLongitude,
     );
   }
 }

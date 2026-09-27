@@ -15,6 +15,8 @@ export interface ProviderProfileDetails {
   verifiedAt: Date | null;
   isAvailable: boolean;
   avatarUrl: string | null;
+  serviceAreaLatitude: number | null;
+  serviceAreaLongitude: number | null;
   createdAt: Date;
   updatedAt: Date;
   user: { name: string; email: string; phone: string };

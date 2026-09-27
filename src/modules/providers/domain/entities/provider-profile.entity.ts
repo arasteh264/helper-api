@@ -24,6 +24,8 @@ export class ProviderProfile {
     private _updatedAt: Date,
     private _avatarUrl: string | null,
     private _avatarPublicId: string | null,
+    private _serviceAreaLatitude: number | null,
+    private _serviceAreaLongitude: number | null,
   ) {}
 
   static create(userId: string, bio: string | null): ProviderProfile {
@@ -45,6 +47,8 @@ export class ProviderProfile {
       now,
       null,
       null,
+      null,
+      null,
     );
   }
 
@@ -64,6 +68,8 @@ export class ProviderProfile {
     updatedAt: Date,
     avatarUrl: string | null = null,
     avatarPublicId: string | null = null,
+    serviceAreaLatitude: number | null = null,
+    serviceAreaLongitude: number | null = null,
   ): ProviderProfile {
     return new ProviderProfile(
       id,
@@ -81,6 +87,8 @@ export class ProviderProfile {
       updatedAt,
       avatarUrl,
       avatarPublicId,
+      serviceAreaLatitude,
+      serviceAreaLongitude,
     );
   }
 
@@ -129,6 +137,12 @@ export class ProviderProfile {
   get avatarPublicId(): string | null {
     return this._avatarPublicId;
   }
+  get serviceAreaLatitude(): number | null {
+    return this._serviceAreaLatitude;
+  }
+  get serviceAreaLongitude(): number | null {
+    return this._serviceAreaLongitude;
+  }
 
   updateBio(bio: string | null): void {
     this._bio = bio;
@@ -137,6 +151,12 @@ export class ProviderProfile {
 
   setAvailability(isAvailable: boolean): void {
     this._isAvailable = isAvailable;
+    this._updatedAt = new Date();
+  }
+
+  setServiceArea(latitude: number | null, longitude: number | null): void {
+    this._serviceAreaLatitude = latitude;
+    this._serviceAreaLongitude = longitude;
     this._updatedAt = new Date();
   }
 
