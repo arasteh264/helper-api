@@ -1,28 +1,33 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
-
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  UseGuards,
+  BadRequestException,
+  NotFoundException,
+  Inject,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AdminGuard } from '../../../auth/presentation/guards/admin.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
-
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
-
-import { Inject } from '@nestjs/common';
 
 import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
+import { PROVIDER_DOCUMENT_REPOSITORY } from '../../application/documents/provider-document.repository.token';
+import type { ProviderDocumentRepository } from '../../application/documents/provider-document.repository';
 
 import { ProviderProfileDetailsResponseDto } from '../../application/dto/provider-profile-details-response.dto';
 import { ProviderVerificationStatus } from 'generated/prisma/enums';
-import { GetProviderDocumentsForReviewUseCase } from '../../application/get-provider-documents-for-review.use-case';
-import { ReviewProviderDocumentUseCase } from '../../application/review-provider-document.use-case';
-import { ReviewProviderDocumentDto } from '../../application/dto/review-provider-document.dto';
-
-class ReviewProviderDto {
-  status!: 'APPROVED' | 'REJECTED';
-  note?: string;
-}
+import { GetProviderDocumentsForReviewUseCase } from '../../application/documents/get-provider-documents-for-review.use-case';
+import {  ReviewProviderDto } from '../../application/dto/review-provider-document.dto';
+import { ReviewProviderDocumentUseCase } from '../../application/documents/review-provider-document.use-case';
+import { areRequiredDocumentsApproved } from '../../infrastructure/provider-documents.util';
+import { ReviewProviderDocumentDto } from '../../application/documents/review-provider-document.dto';
 
 @ApiTags('Admin - Providers')
 @ApiBearerAuth()
@@ -32,13 +37,13 @@ export class AdminProviderController {
   constructor(
     @Inject(PROVIDER_PROFILE_REPOSITORY)
     private readonly providerProfileRepository: ProviderProfileRepository,
-     private readonly getProviderDocumentsForReviewUseCase: GetProviderDocumentsForReviewUseCase,
+    @Inject(PROVIDER_DOCUMENT_REPOSITORY)
+    private readonly providerDocumentRepository: ProviderDocumentRepository,
+    private readonly getProviderDocumentsForReviewUseCase: GetProviderDocumentsForReviewUseCase,
     private readonly reviewProviderDocumentUseCase: ReviewProviderDocumentUseCase,
   ) {}
 
-  @ApiOperation({
-    summary: 'List all provider profiles pending review',
-  })
+  @ApiOperation({ summary: 'List all provider profiles pending review' })
   @Get('pending')
   async listPending(@CurrentUser() _currentUser: TokenPayload) {
     const providers =
@@ -60,9 +65,7 @@ export class AdminProviderController {
       .map((provider) => ProviderProfileDetailsResponseDto.from(provider));
   }
 
-  @ApiOperation({
-    summary: 'Review a provider registration',
-  })
+  @ApiOperation({ summary: 'Review a provider registration' })
   @Patch(':providerId/review')
   async review(
     @CurrentUser() _currentUser: TokenPayload,
@@ -70,13 +73,22 @@ export class AdminProviderController {
     @Body() dto: ReviewProviderDto,
   ) {
     const profile = await this.providerProfileRepository.findById(providerId);
+    if (!profile) throw new NotFoundException('Provider profile not found');
 
-    if (!profile) {
-      throw new Error('Provider profile not found');
+    if (dto.status === 'APPROVED') {
+      const documents =
+        await this.providerDocumentRepository.findByProviderProfileId(
+          providerId,
+        );
+
+      if (!areRequiredDocumentsApproved(documents)) {
+        throw new BadRequestException(
+          'همه‌ی مدارک اجباری باید قبل از تأیید نهایی، تأیید شده باشن',
+        );
+      }
     }
 
     profile.reviewDecision(dto.status, dto.note);
-
     await this.providerProfileRepository.update(profile);
 
     const details = await this.providerProfileRepository.findDetailsByUserId(
@@ -85,10 +97,13 @@ export class AdminProviderController {
 
     return ProviderProfileDetailsResponseDto.from(details!);
   }
-    @ApiOperation({ summary: 'Get all verification documents of a provider' })
+
+  @ApiOperation({ summary: 'Get all verification documents of a provider' })
   @Get(':providerProfileId/documents')
   getDocuments(@Param('providerProfileId') providerProfileId: string) {
-    return this.getProviderDocumentsForReviewUseCase.execute(providerProfileId);
+    return this.getProviderDocumentsForReviewUseCase.execute(
+      providerProfileId,
+    );
   }
 
   @ApiOperation({ summary: 'Approve or reject a verification document' })

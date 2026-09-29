@@ -4,7 +4,7 @@ import {
   ProviderDocumentRecord,
   ProviderDocumentRepository,
   UpsertProviderDocumentInput,
-} from '../../application/provider-document.repository';
+} from '../../application/documents/provider-document.repository';
 
 @Injectable()
 export class PrismaProviderDocumentRepository implements ProviderDocumentRepository {
