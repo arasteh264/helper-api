@@ -4,13 +4,12 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import type { ProviderProfileRepository } from '../domain/repositories/provider-profile.repository';
-import { PROVIDER_PROFILE_REPOSITORY } from '../domain/repositories/provider-profile.repository.token';
-import { ProviderProfile } from '../domain/entities/provider-profile.entity';
-import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
-import * as userRepository from '../../users/domain/repositories/user.repository';
-import { UserRole } from '../../users/domain/entities/user-role.enum';
 
+import * as userRepository from '../../../users/domain/repositories/user.repository';
+import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
+import { USER_REPOSITORY } from '@/modules/users/domain/repositories/user.repository.token';
+import { ProviderProfile } from '../../domain/entities/provider-profile.entity';
+import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 @Injectable()
 export class CreateProviderProfileUseCase {
   constructor(

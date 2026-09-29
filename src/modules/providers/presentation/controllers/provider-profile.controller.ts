@@ -30,14 +30,9 @@ import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 
-import { CreateProviderProfileUseCase } from '../../application/create-provider-profile.use-case';
-import { AddSkillToProviderUseCase } from '../../application/dd-skill-to-provider.use-case';
-import { GetMyProviderProfileUseCase } from '../../application/get-my-provider-profile.use-case';
+
 import { GetApprovedProvidersUseCase } from '../../application/get-approved-providers.use-case';
-import { UpdateProviderProfileUseCase } from '../../application/update-provider-profile.use-case';
-import { RemoveSkillFromProviderUseCase } from '../../application/remove-skill-from-provider.use-case';
-import { UploadProviderAvatarUseCase } from '../../application/upload-provider-avatar.use-case';
-import { RemoveProviderAvatarUseCase } from '../../application/remove-provider-avatar.use-case';
+
 
 import { CreateProviderProfileDto } from '../../application/dto/create-provider-profile.dto';
 import { AddSkillDto } from '../../application/dto/add-skill.dto';
@@ -50,8 +45,16 @@ import { AddImageToPortfolioItemUseCase } from '../../application/portfolio/add-
 import { DeletePortfolioItemImageUseCase } from '../../application/portfolio/delete-portfolio-item-image.use-case';
 import { CreatePortfolioItemDto } from '../../application/dto/create-portfolio-item.dto';
 import { UploadProviderDocumentDto } from '../../application/dto/upload-provider-document.dto';
-import { UploadProviderDocumentUseCase } from '../../application/upload-provider-document.use-case';
-import { GetMyDocumentsUseCase } from '../../application/get-my-documents.use-case';
+import { GetMyProviderProfileUseCase } from '../../application/profile/get-my-provider-profile.use-case';
+import { AddSkillToProviderUseCase } from '../../application/skills/dd-skill-to-provider.use-case';
+import { UpdateProviderProfileUseCase } from '../../application/profile/update-provider-profile.use-case';
+import { UploadProviderAvatarUseCase } from '../../application/profile/upload-provider-avatar.use-case';
+import { RemoveProviderAvatarUseCase } from '../../application/profile/remove-provider-avatar.use-case';
+import { UploadProviderDocumentUseCase } from '../../application/documents/upload-provider-document.use-case';
+import { GetMyDocumentsUseCase } from '../../application/documents/get-my-documents.use-case';
+import { RemoveSkillFromProviderUseCase } from '../../application/skills/remove-skill-from-provider.use-case';
+import { CreateProviderProfileUseCase } from '../../application/profile/create-provider-profile.use-case';
+
 
 @ApiTags('Providers')
 @ApiBearerAuth()

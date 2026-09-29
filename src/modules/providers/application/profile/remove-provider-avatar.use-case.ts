@@ -1,8 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { ProviderProfileRepository } from '../domain/repositories/provider-profile.repository';
-import { PROVIDER_PROFILE_REPOSITORY } from '../domain/repositories/provider-profile.repository.token';
-import type { ImageUploader } from '../../../shared/storage/image-uploader.port';
-import { IMAGE_UPLOADER } from '../../../shared/storage/image-uploader.token';
+import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
+import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
+import { IMAGE_UPLOADER } from '@/shared/storage/image-uploader.token';
+import type { ImageUploader } from '@/shared/storage/image-uploader.port';
+
 
 @Injectable()
 export class RemoveProviderAvatarUseCase {

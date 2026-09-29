@@ -1,12 +1,16 @@
+// provider-document.repository.ts
+export type ProviderDocumentType =
+  | 'NATIONAL_CARD'
+  | 'BUSINESS_LICENSE'
+  | 'CERTIFICATE'
+  | 'COMMITMENT_LETTER'
+  | 'CRIMINAL_RECORD'
+  | 'OTHER';
+
 export interface ProviderDocumentRecord {
   id: string;
   providerProfileId: string;
-  type:
-    | 'NATIONAL_CARD'
-    | 'BUSINESS_LICENSE'
-    | 'CERTIFICATE'
-    | 'COMMITMENT_LETTER'
-    | 'OTHER';
+  type: ProviderDocumentType;
   url: string;
   publicId: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -36,3 +40,13 @@ export interface ProviderDocumentRepository {
     rejectionNote?: string | null,
   ): Promise<ProviderDocumentRecord>;
 }
+
+// مدارکی که ادمین حتماً باید تأیید کنه تا پروفایل بتونه وریفای بشه.
+// اگه لازمه CRIMINAL_RECORD یا مدرک دیگه‌ای اختیاری باشه، همینجا حذفش کن.
+export const REQUIRED_PROVIDER_DOCUMENT_TYPES: ProviderDocumentType[] = [
+  'NATIONAL_CARD',
+  'BUSINESS_LICENSE',
+  'CERTIFICATE',
+  'COMMITMENT_LETTER',
+  'CRIMINAL_RECORD',
+];
