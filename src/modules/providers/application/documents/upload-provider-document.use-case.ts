@@ -3,8 +3,8 @@ import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 import { PROVIDER_DOCUMENT_REPOSITORY } from './provider-document.repository.token';
 import type { ProviderDocumentRecord, ProviderDocumentRepository } from './provider-document.repository';
-import { IMAGE_UPLOADER } from '@/shared/storage/image-uploader.token';
-import type { ImageUploader } from '@/shared/storage/image-uploader.port';
+import { IMAGE_UPLOADER } from '../../../../shared/storage/image-uploader.token';
+import type { ImageUploader } from '../../../../shared/storage/image-uploader.port';
 
 
 @Injectable()
