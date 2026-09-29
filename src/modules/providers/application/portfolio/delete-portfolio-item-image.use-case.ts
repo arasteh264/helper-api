@@ -4,8 +4,8 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { IMAGE_UPLOADER } from '@/shared/storage/image-uploader.token';
-import type { ImageUploader } from '@/shared/storage/image-uploader.port';
+import { IMAGE_UPLOADER } from '../../../../shared/storage/image-uploader.token';
+import type { ImageUploader } from '../../../../shared/storage/image-uploader.port';
 import { PORTFOLIO_ITEM_REPOSITORY } from '../../domain/repositories/portfolio-item.repository.token';
 import type { PortfolioItemRepository } from '../../domain/repositories/portfolio-item.repository';
 import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';

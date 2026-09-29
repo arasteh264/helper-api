@@ -7,7 +7,7 @@ import {
 
 import * as userRepository from '../../../users/domain/repositories/user.repository';
 import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
-import { USER_REPOSITORY } from '@/modules/users/domain/repositories/user.repository.token';
+import { USER_REPOSITORY } from '../../../users/domain/repositories/user.repository.token';
 import { ProviderProfile } from '../../domain/entities/provider-profile.entity';
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 @Injectable()
