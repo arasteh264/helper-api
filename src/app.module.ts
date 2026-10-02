@@ -9,6 +9,7 @@ import { DatabaseModule } from './infrastructure/database/database.module';
 import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
 import { StorageModule } from './shared/storage/storage.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
     ProvidersModule,
     ServiceRequestsModule,
     WalletModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
