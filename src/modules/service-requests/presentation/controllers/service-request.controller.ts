@@ -33,17 +33,22 @@ import { AddSkillToRequestDto } from '../../application/dto/add-skill-to-request
 import { ServiceRequestResponseDto } from '../../application/dto/service-request-response.dto';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import { InviteProviderDto } from '../../application/dto/invite-provider.dto';
-
+import { ListMyServiceRequestsUseCase } from "../../../../modules/customers/application/list-my-service-requests.use-case"
+import { MatchProvidersForRequestUseCase } from '@/modules/matching/application/match-providers-for-request.use-case';
+import { Logger } from '@nestjs/common';
 @ApiTags('Service Requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('service-requests')
 export class ServiceRequestController {
+  private readonly logger = new Logger(ServiceRequestController.name);
   constructor(
     private readonly createServiceRequestUseCase: CreateServiceRequestUseCase,
     private readonly addSkillToRequestUseCase: AddSkillToRequestUseCase,
-    private readonly uploadServiceRequestImageUseCase: UploadServiceRequestImageUseCase, // ← اضافه شد
+    private readonly uploadServiceRequestImageUseCase: UploadServiceRequestImageUseCase,
     private readonly prisma: PrismaService,
+    private readonly listMyRequests: ListMyServiceRequestsUseCase,
+    private readonly matchProviders: MatchProvidersForRequestUseCase,
   ) {}
 
   @ApiOperation({
@@ -90,25 +95,10 @@ export class ServiceRequestController {
       );
   }
 
-  @ApiOperation({ summary: 'List my service requests' })
-  @Get('mine')
-  getMine(@CurrentUser() currentUser: TokenPayload) {
-    return this.prisma.serviceRequest
-      .findMany({
-        where: { customerId: currentUser.userId },
-        include: {
-          skills: { include: { skill: true } },
-          images: true,
-          acceptedProviderProfile: {
-            include: { user: { select: { name: true, phone: true } } },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      .then((requests) =>
-        requests.map((request) => this.toCustomerView(request)),
-      );
-  }
+@Get('mine')
+getMine(@CurrentUser() currentUser: TokenPayload) {
+  return this.listMyRequests.execute(currentUser.userId);
+}
 
   @ApiOperation({
     summary: 'Get matching available specialists ordered by distance',
@@ -255,7 +245,13 @@ export class ServiceRequestController {
       budgetMin: dto.budgetMin,
       budgetMax: dto.budgetMax,
     });
-    return ServiceRequestResponseDto.fromEntity(request);
+    void this.matchProviders.execute(request.id).catch((error) =>
+  this.logger.error(
+    `Matching failed for request ${request.id}`,
+    error instanceof Error ? error.stack : String(error),
+  ),
+);
+   return ServiceRequestResponseDto.fromEntity(request);
   }
 
   @ApiOperation({ summary: 'Add a required skill to your service request' })

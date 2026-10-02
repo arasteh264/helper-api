@@ -50,6 +50,7 @@ model User {
   otpCode          String?
   otpExpiresAt     DateTime?
   providerProfile  ProviderProfile?
+  customerProfile CustomerProfile?
 }
 
 model PendingRegistration {
@@ -358,11 +359,32 @@ model ProviderRequestInvitation {
   status            ProviderInvitationStatus @default(PENDING)
   createdAt         DateTime @default(now())
   respondedAt       DateTime?
-
+ distanceKm Float?
+  notifiedAt DateTime?
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
   serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
 
   @@unique([providerProfileId, serviceRequestId])
   @@index([providerProfileId, status, createdAt])
   @@index([serviceRequestId, status])
+}
+
+model CustomerWallet {
+  id                String   @id @default(uuid())
+  customerProfileId String   @unique
+  balance           Int      @default(0)
+  totalSpent        Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id])
+}
+model CustomerProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id])
+  wallet CustomerWallet?
 }

@@ -22,7 +22,7 @@ export class VerifyRegistrationOtpUseCase {
     const pending = await this.prisma.pendingRegistration.findUnique({
       where: { phone },
     });
-
+console.log({ phone, pending });
     if (!pending) {
       throw new BadRequestException('No pending registration found');
     }
