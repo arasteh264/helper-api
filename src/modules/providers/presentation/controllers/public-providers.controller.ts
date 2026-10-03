@@ -36,6 +36,7 @@ export class PublicProvidersController {
       include: {
         user: { select: { name: true } },
         skills: { include: { skill: true } },
+        specialties: { include: { specialty: { include: { group: true } } } },
         portfolioItems: {
           include: { images: { orderBy: { order: 'asc' } } },
           orderBy: { order: 'asc' },
@@ -76,6 +77,7 @@ export class PublicProvidersController {
       include: {
         user: { select: { name: true } },
         skills: { include: { skill: true } },
+        specialties: { include: { specialty: { include: { group: true } } } },
         workingHours: true,
         portfolioItems: {
           include: { images: { orderBy: { order: 'asc' } } },
@@ -102,6 +104,14 @@ export class PublicProvidersController {
       skills: provider.skills.map((item: any) => ({
         id: item.skill.id,
         name: item.skill.name,
+      })),
+      specialties: (provider.specialties ?? []).map((item: any) => ({
+        id: item.specialty.id,
+        name: item.specialty.name,
+        slug: item.specialty.slug,
+        icon: item.specialty.icon,
+        groupId: item.specialty.groupId,
+        groupName: item.specialty.group.name,
       })),
       workingHours: provider.workingHours ?? [],
       portfolio: (provider.portfolioItems ?? []).flatMap((item: any) =>

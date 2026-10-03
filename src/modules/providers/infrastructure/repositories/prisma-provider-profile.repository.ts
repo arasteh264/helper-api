@@ -91,6 +91,38 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
 
     return profile ? this.toDomain(profile) : null;
   }
+
+  async findActiveSpecialtyIds(specialtyIds: string[]): Promise<string[]> {
+    if (!specialtyIds.length) return [];
+
+    const specialties = await this.prisma.specialty.findMany({
+      where: { id: { in: specialtyIds }, isActive: true },
+      select: { id: true },
+    });
+    return specialties.map((specialty) => specialty.id);
+  }
+
+  async replaceSpecialties(
+    providerProfileId: string,
+    specialtyIds: string[],
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.providerSpecialty.deleteMany({
+        where: { providerProfileId },
+      }),
+      ...(specialtyIds.length
+        ? [
+            this.prisma.providerSpecialty.createMany({
+              data: specialtyIds.map((specialtyId) => ({
+                providerProfileId,
+                specialtyId,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+  }
+
   async findAllApproved(): Promise<ProviderProfile[]> {
     const rows = await this.prisma.providerProfile.findMany({
       where: {
@@ -121,6 +153,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       include: {
         user: { select: { name: true, email: true, phone: true } },
         skills: { include: { skill: true } },
+        specialties: { include: { specialty: { include: { group: true } } } },
         workingHours: true,
       },
     });
@@ -144,6 +177,14 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       updatedAt: p.updatedAt,
       user: p.user,
       skills: p.skills.map((s) => ({ id: s.skill.id, name: s.skill.name })),
+      specialties: p.specialties.map(({ specialty }) => ({
+        id: specialty.id,
+        name: specialty.name,
+        slug: specialty.slug,
+        icon: specialty.icon,
+        groupId: specialty.groupId,
+        groupName: specialty.group.name,
+      })),
       workingHours: p.workingHours.map((hour) => ({
         dayOfWeek: hour.dayOfWeek,
         isActive: hour.isActive,
@@ -195,6 +236,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
             skill: true,
           },
         },
+        specialties: { include: { specialty: { include: { group: true } } } },
         workingHours: true,
       },
       orderBy: {
@@ -223,6 +265,15 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       skills: p.skills.map((s) => ({
         id: s.skill.id,
         name: s.skill.name,
+      })),
+
+      specialties: p.specialties.map(({ specialty }) => ({
+        id: specialty.id,
+        name: specialty.name,
+        slug: specialty.slug,
+        icon: specialty.icon,
+        groupId: specialty.groupId,
+        groupName: specialty.group.name,
       })),
 
       workingHours: p.workingHours.map((hour) => ({

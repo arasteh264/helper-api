@@ -12,9 +12,10 @@ export class ListMyServiceRequestsUseCase {
       where: { customerId: userId },
       include: {
         skills: { include: { skill: true } },
+        specialty: { select: { name: true } },
         images: true,
         acceptedProviderProfile: {
-          include: { user: { select: { name: true, phone: true } } },
+          include: { user: { select: { name: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },

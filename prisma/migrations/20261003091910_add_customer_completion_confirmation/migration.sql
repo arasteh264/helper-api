@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ServiceRequestStatus" ADD VALUE 'AWAITING_CUSTOMER_CONFIRMATION';

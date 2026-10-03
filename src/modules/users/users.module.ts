@@ -12,9 +12,10 @@ import { PASSWORD_HASHER } from './domain/services/password-hasher.token';
 import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-hasher';
 import { SmsModule } from '../sms/sms.module';
 import { VerifyRegistrationOtpUseCase } from './application/verify-registration-otp.use-case';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [SmsModule],
+  imports: [SmsModule, NotificationsModule],
   controllers: [UsersController],
 
   providers: [

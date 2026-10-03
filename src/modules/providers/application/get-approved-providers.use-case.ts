@@ -16,8 +16,9 @@ export class GetApprovedProvidersUseCase {
     const providers =
       await this.providerProfileRepository.findAllApprovedDetails();
 
-    return providers.map((provider) =>
-      ProviderProfileDetailsResponseDto.from(provider),
-    );
+    return providers.map((provider) => {
+      const details = ProviderProfileDetailsResponseDto.from(provider);
+      return { ...details, user: { name: provider.user.name } };
+    });
   }
 }

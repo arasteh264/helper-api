@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
+import { Prisma } from '../../../../../generated/prisma/client';
 import { buildPaginatedResult } from '../../../../shared/utils/paginate.util';
 import { PaginatedResult } from '../../../../shared/types/paginated-result.type';
 import { WalletTransactionType } from '../../domain/entities/wallet-transaction-type';
@@ -12,6 +13,10 @@ import type {
   CreditResult,
   CreditWalletInput,
   ListWalletTransactionsFilter,
+  PayoutRequestView,
+  PayoutReviewInput,
+  PlatformAccountingSummary,
+  PlatformWalletTransactionView,
   WalletRepository,
   WalletSummary,
   WalletTransactionView,
@@ -46,19 +51,57 @@ export class PrismaWalletRepository implements WalletRepository {
         1,
       ),
     );
-    const earnings = await this.prisma.walletTransaction.findMany({
-      where: {
-        walletId: wallet.id,
-        type: WalletTransactionType.EARNING,
-        createdAt: { gte: monthlyStart },
-      },
-      select: { amount: true, createdAt: true },
-    });
+    const monthStart = new Date(
+      Date.UTC(currentMonth.getUTCFullYear(), currentMonth.getUTCMonth(), 1),
+    );
+    const [earnings, commissionTransactions, totalCommission] =
+      await Promise.all([
+        this.prisma.walletTransaction.findMany({
+          where: {
+            walletId: wallet.id,
+            type: {
+              in: [
+                WalletTransactionType.EARNING,
+                WalletTransactionType.COMMISSION,
+              ],
+            },
+            createdAt: { gte: monthlyStart },
+          },
+          select: { type: true, amount: true, createdAt: true },
+        }),
+        this.prisma.walletTransaction.findMany({
+          where: {
+            walletId: wallet.id,
+            type: WalletTransactionType.COMMISSION,
+            createdAt: { gte: monthStart },
+          },
+          select: { amount: true },
+        }),
+        this.prisma.walletTransaction.aggregate({
+          where: {
+            walletId: wallet.id,
+            type: WalletTransactionType.COMMISSION,
+          },
+          _sum: { amount: true },
+        }),
+      ]);
     const monthlyTotals = new Map<string, number>();
     for (const earning of earnings) {
+      if (earning.type !== WalletTransactionType.EARNING) continue;
       const key = `${earning.createdAt.getUTCFullYear()}-${earning.createdAt.getUTCMonth()}`;
       monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + earning.amount);
     }
+    const currentMonthEarned = earnings
+      .filter(
+        (earning) =>
+          earning.type === WalletTransactionType.EARNING &&
+          earning.createdAt >= monthStart,
+      )
+      .reduce((total, earning) => total + earning.amount, 0);
+    const currentMonthCommission = commissionTransactions.reduce(
+      (total, transaction) => total + Math.abs(transaction.amount),
+      0,
+    );
     const monthFormatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
       month: 'long',
       timeZone: 'UTC',
@@ -82,7 +125,13 @@ export class PrismaWalletRepository implements WalletRepository {
       id: wallet.id,
       balance: wallet.balance,
       totalEarned: wallet.totalEarned,
+      totalNetEarned:
+        wallet.totalEarned - Math.abs(totalCommission._sum.amount ?? 0),
       totalWithdrawn: wallet.totalWithdrawn,
+      totalCommission: Math.abs(totalCommission._sum.amount ?? 0),
+      currentMonthEarned,
+      currentMonthNetEarned: currentMonthEarned - currentMonthCommission,
+      currentMonthCommission,
       pendingPayouts: pending._sum.amount ?? 0,
       commissionRate: configuration.commissionRate,
       minWithdrawal: configuration.minWithdrawal,
@@ -358,6 +407,268 @@ export class PrismaWalletRepository implements WalletRepository {
     });
   }
 
+  async listPayoutRequests(
+    page: number,
+    pageSize: number,
+    status?: 'PENDING' | 'PAID' | 'REJECTED' | 'CANCELLED',
+  ) {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+    const where = status ? { status } : {};
+    const [payouts, total] = await this.prisma.$transaction([
+      this.prisma.payoutRequest.findMany({
+        where,
+        include: {
+          wallet: {
+            include: {
+              providerProfile: {
+                include: { user: { select: { name: true } } },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safePageSize,
+        take: safePageSize,
+      }),
+      this.prisma.payoutRequest.count({ where }),
+    ]);
+    return {
+      items: payouts.map((payout) => this.toPayoutView(payout)),
+      page: safePage,
+      pageSize: safePageSize,
+      total,
+    };
+  }
+
+  async listMyPayoutRequests(userId: string): Promise<PayoutRequestView[]> {
+    const payouts = await this.prisma.payoutRequest.findMany({
+      where: { wallet: { providerProfile: { userId } } },
+      include: {
+        wallet: {
+          include: {
+            providerProfile: { include: { user: { select: { name: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return payouts.map((payout) => this.toPayoutView(payout));
+  }
+
+  async reviewPayoutRequest(
+    input: PayoutReviewInput,
+  ): Promise<PayoutRequestView> {
+    return this.prisma.$transaction(async (db) => {
+      const payout = await db.payoutRequest.findUnique({
+        where: { id: input.payoutRequestId },
+        select: { id: true, walletId: true, amount: true, status: true },
+      });
+      if (!payout) throw new NotFoundException('درخواست برداشت پیدا نشد');
+
+      const updated = await db.payoutRequest.updateMany({
+        where: { id: payout.id, status: 'PENDING' },
+        data: {
+          status: input.decision,
+          referenceCode: input.decision === 'PAID' ? input.referenceCode : null,
+          rejectReason:
+            input.decision === 'REJECTED' ? input.rejectReason : null,
+          processedById: input.adminUserId,
+          processedAt: new Date(),
+        },
+      });
+      if (!updated.count) {
+        throw new BadRequestException('این درخواست برداشت قبلاً بررسی شده است');
+      }
+
+      if (input.decision === 'PAID') {
+        await db.wallet.update({
+          where: { id: payout.walletId },
+          data: { totalWithdrawn: { increment: payout.amount } },
+        });
+      } else {
+        const wallet = await db.wallet.update({
+          where: { id: payout.walletId },
+          data: { balance: { increment: payout.amount } },
+          select: { balance: true },
+        });
+        await db.walletTransaction.create({
+          data: {
+            walletId: payout.walletId,
+            type: WalletTransactionType.PAYOUT_REFUND,
+            amount: payout.amount,
+            balanceAfter: wallet.balance,
+            description: input.rejectReason ?? 'درخواست برداشت رد شد',
+            payoutRequestId: payout.id,
+          },
+        });
+      }
+
+      const reviewed = await db.payoutRequest.findUniqueOrThrow({
+        where: { id: payout.id },
+        include: {
+          wallet: {
+            include: {
+              providerProfile: {
+                include: { user: { select: { name: true } } },
+              },
+            },
+          },
+        },
+      });
+      return this.toPayoutView(reviewed);
+    });
+  }
+
+  async getPlatformAccountingSummary(): Promise<PlatformAccountingSummary> {
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const [
+      allPayments,
+      monthPayments,
+      allCommission,
+      monthCommission,
+      wallets,
+      monthProviderEarnings,
+      pendingPayouts,
+      paidPayouts,
+      monthPaidPayouts,
+    ] = await Promise.all([
+      this.prisma.payment.aggregate({
+        where: { status: 'PAID' },
+        _sum: { amountToman: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: { status: 'PAID', paidAt: { gte: monthStart } },
+        _sum: { amountToman: true },
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: { type: WalletTransactionType.COMMISSION },
+        _sum: { amount: true },
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: {
+          type: WalletTransactionType.COMMISSION,
+          createdAt: { gte: monthStart },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.wallet.aggregate({
+        _sum: { balance: true, totalEarned: true },
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: {
+          type: WalletTransactionType.EARNING,
+          createdAt: { gte: monthStart },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.payoutRequest.aggregate({
+        where: { status: 'PENDING' },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.payoutRequest.aggregate({
+        where: { status: 'PAID' },
+        _sum: { amount: true },
+      }),
+      this.prisma.payoutRequest.aggregate({
+        where: { status: 'PAID', processedAt: { gte: monthStart } },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return {
+      allTimePaidVolumeToman: allPayments._sum.amountToman ?? 0,
+      currentMonthPaidVolumeToman: monthPayments._sum.amountToman ?? 0,
+      allTimePlatformCommissionToman: Math.abs(allCommission._sum.amount ?? 0),
+      currentMonthPlatformCommissionToman: Math.abs(
+        monthCommission._sum.amount ?? 0,
+      ),
+      providerGrossEarningsToman: wallets._sum.totalEarned ?? 0,
+      currentMonthProviderGrossEarningsToman:
+        monthProviderEarnings._sum.amount ?? 0,
+      providerAvailableBalanceToman: wallets._sum.balance ?? 0,
+      providerFundsHeldToman:
+        (wallets._sum.balance ?? 0) + (pendingPayouts._sum.amount ?? 0),
+      pendingPayoutAmountToman: pendingPayouts._sum.amount ?? 0,
+      pendingPayoutCount: pendingPayouts._count._all,
+      totalPaidOutToman: paidPayouts._sum.amount ?? 0,
+      currentMonthPaidOutToman: monthPaidPayouts._sum.amount ?? 0,
+    };
+  }
+
+  async listPlatformTransactions(
+    page: number,
+    pageSize: number,
+    filter: {
+      type?: WalletTransactionType;
+      direction?: 'in' | 'out';
+      createdFrom?: Date;
+      createdTo?: Date;
+    },
+  ): Promise<PaginatedResult<PlatformWalletTransactionView>> {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+    const where: Prisma.WalletTransactionWhereInput = {};
+    if (filter.type) where.type = filter.type;
+    if (filter.direction === 'in') where.amount = { gt: 0 };
+    if (filter.direction === 'out') where.amount = { lt: 0 };
+    if (filter.createdFrom || filter.createdTo) {
+      where.createdAt = {
+        ...(filter.createdFrom && { gte: filter.createdFrom }),
+        ...(filter.createdTo && { lte: filter.createdTo }),
+      };
+    }
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.walletTransaction.findMany({
+        where,
+        include: {
+          wallet: {
+            include: {
+              providerProfile: {
+                include: { user: { select: { name: true } } },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (safePage - 1) * safePageSize,
+        take: safePageSize,
+      }),
+      this.prisma.walletTransaction.count({ where }),
+    ]);
+    const payoutIds = rows
+      .map((row) => row.payoutRequestId)
+      .filter((id): id is string => Boolean(id));
+    const payouts = payoutIds.length
+      ? await this.prisma.payoutRequest.findMany({
+          where: { id: { in: payoutIds } },
+          select: { id: true, status: true },
+        })
+      : [];
+    const payoutStatuses = new Map(
+      payouts.map((payout) => [payout.id, payout.status]),
+    );
+
+    return buildPaginatedResult(
+      rows.map((row) => ({
+        ...this.toTransactionView({
+          ...row,
+          payoutStatus: row.payoutRequestId
+            ? (payoutStatuses.get(row.payoutRequestId) ?? null)
+            : null,
+        }),
+        providerProfileId: row.wallet.providerProfileId,
+        providerName: row.wallet.providerProfile.user.name,
+      })),
+      total,
+    );
+  }
+
   private async getOrCreateWallet(
     providerProfileId: string,
     client: Pick<PrismaService, 'wallet'> = this.prisma,
@@ -422,6 +733,38 @@ export class PrismaWalletRepository implements WalletRepository {
       payoutRequestId: r.payoutRequestId,
       createdAt: r.createdAt,
       payoutStatus: r.payoutStatus ?? null,
+    };
+  }
+
+  private toPayoutView(payout: {
+    id: string;
+    amount: number;
+    status: string;
+    holderName: string;
+    sheba: string;
+    bankName: string | null;
+    referenceCode: string | null;
+    rejectReason: string | null;
+    createdAt: Date;
+    processedAt: Date | null;
+    wallet: {
+      providerProfileId: string;
+      providerProfile: { user: { name: string } };
+    };
+  }): PayoutRequestView {
+    return {
+      id: payout.id,
+      providerProfileId: payout.wallet.providerProfileId,
+      providerName: payout.wallet.providerProfile.user.name,
+      amount: payout.amount,
+      status: payout.status as PayoutRequestView['status'],
+      holderName: payout.holderName,
+      sheba: payout.sheba,
+      bankName: payout.bankName,
+      referenceCode: payout.referenceCode,
+      rejectReason: payout.rejectReason,
+      createdAt: payout.createdAt,
+      processedAt: payout.processedAt,
     };
   }
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ProvidersModule } from '../providers/providers.module';
 import { ServiceRequestController } from './presentation/controllers/service-request.controller';
+import { PublicServiceCategoriesController } from './presentation/controllers/public-service-categories.controller';
 import { CreateServiceRequestUseCase } from './application/create-service-request.use-case';
 import { AddSkillToRequestUseCase } from './application/add-skill-to-request.use-case';
 import { SERVICE_REQUEST_REPOSITORY } from './domain/repositories/service-request.repository.token';
@@ -13,7 +14,11 @@ import { MatchingModule } from '../matching/matching.module';
 
 @Module({
   imports: [ProvidersModule, MatchingModule],
-  controllers: [ServiceRequestController, AdminServiceRequestController],
+  controllers: [
+    PublicServiceCategoriesController,
+    ServiceRequestController,
+    AdminServiceRequestController,
+  ],
   providers: [
     CreateServiceRequestUseCase,
     AddSkillToRequestUseCase,

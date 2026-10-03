@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -30,10 +31,18 @@ export class CreateServiceRequestDto {
   @MaxLength(1000)
   description!: string;
 
-  @ApiProperty({ example: 'لوله‌کشی' })
+  @ApiPropertyOptional({
+    example: 'لوله‌کشی',
+    description: 'Legacy free-text skill',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  skillName!: string;
+  skillName?: string;
+
+  @ApiPropertyOptional({ description: 'Selected active specialty ID' })
+  @IsOptional()
+  @IsUUID('4')
+  specialtyId?: string;
 
   @ApiProperty({ example: 'تهران، گیشا، خیابان کوشک' })
   @IsString()

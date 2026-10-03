@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 import { ProviderJobsUseCase } from '../../application/provider-jobs.use-case';
+import { AcceptServiceRequestDto } from '../../application/dto/accept-service-request.dto';
 
 @ApiTags('Provider Jobs')
 @ApiBearerAuth()
@@ -23,8 +24,14 @@ export class ProviderJobsController {
   accept(
     @CurrentUser() user: TokenPayload,
     @Param('requestId') requestId: string,
+    @Body() dto: AcceptServiceRequestDto,
   ) {
-    return this.providerJobsUseCase.accept(user.userId, requestId);
+    return this.providerJobsUseCase.accept(
+      user.userId,
+      requestId,
+      dto.proposedPriceToman,
+      dto.estimatedHours,
+    );
   }
 
   @ApiOperation({ summary: 'Decline a service request for this provider' })

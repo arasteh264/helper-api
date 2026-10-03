@@ -33,8 +33,8 @@ import { AddSkillToRequestDto } from '../../application/dto/add-skill-to-request
 import { ServiceRequestResponseDto } from '../../application/dto/service-request-response.dto';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import { InviteProviderDto } from '../../application/dto/invite-provider.dto';
-import { ListMyServiceRequestsUseCase } from "../../../../modules/customers/application/list-my-service-requests.use-case"
-import { MatchProvidersForRequestUseCase } from '@/modules/matching/application/match-providers-for-request.use-case';
+import { ListMyServiceRequestsUseCase } from '../../../../modules/customers/application/list-my-service-requests.use-case';
+import { MatchProvidersForRequestUseCase } from '../../../../modules/matching/application/match-providers-for-request.use-case';
 import { Logger } from '@nestjs/common';
 @ApiTags('Service Requests')
 @ApiBearerAuth()
@@ -51,54 +51,10 @@ export class ServiceRequestController {
     private readonly matchProviders: MatchProvidersForRequestUseCase,
   ) {}
 
-  @ApiOperation({
-    summary: 'List active service categories with approved providers',
-  })
-  @Get('categories')
-  getCategories() {
-    return this.prisma.skill
-      .findMany({
-        where: {
-          providers: {
-            some: {
-              providerProfile: {
-                verificationStatus: 'APPROVED',
-                isAvailable: true,
-              },
-            },
-          },
-        },
-        select: {
-          id: true,
-          name: true,
-          _count: {
-            select: {
-              providers: {
-                where: {
-                  providerProfile: {
-                    verificationStatus: 'APPROVED',
-                    isAvailable: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: 'asc' },
-      })
-      .then((skills) =>
-        skills.map((skill) => ({
-          id: skill.id,
-          name: skill.name,
-          providerCount: skill._count.providers,
-        })),
-      );
+  @Get('mine')
+  getMine(@CurrentUser() currentUser: TokenPayload) {
+    return this.listMyRequests.execute(currentUser.userId);
   }
-
-@Get('mine')
-getMine(@CurrentUser() currentUser: TokenPayload) {
-  return this.listMyRequests.execute(currentUser.userId);
-}
 
   @ApiOperation({
     summary: 'Get matching available specialists ordered by distance',
@@ -115,17 +71,25 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
 
     const skillIds = request.skills.map((item) => item.skillId);
-    if (!skillIds.length) return [];
+    if (!skillIds.length && !request.specialtyId) return [];
 
     const providers = await this.prisma.providerProfile.findMany({
       where: {
         verificationStatus: 'APPROVED',
         isAvailable: true,
-        skills: { some: { skillId: { in: skillIds } } },
+        OR: [
+          ...(request.specialtyId
+            ? [{ specialties: { some: { specialtyId: request.specialtyId } } }]
+            : []),
+          ...(skillIds.length
+            ? [{ skills: { some: { skillId: { in: skillIds } } } }]
+            : []),
+        ],
       },
       include: {
         user: { select: { name: true } },
         skills: { include: { skill: true } },
+        specialties: { include: { specialty: { include: { group: true } } } },
       },
     });
 
@@ -137,6 +101,11 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
         verified: provider.isVerified,
         avatarUrl: provider.avatarUrl,
         skills: provider.skills.map((item) => item.skill.name),
+        specialties: provider.specialties.map((item) => ({
+          id: item.specialty.id,
+          name: item.specialty.name,
+          groupName: item.specialty.group.name,
+        })),
         distanceKm:
           request.latitude !== null &&
           request.longitude !== null &&
@@ -173,14 +142,24 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
     });
     if (!request) throw new NotFoundException('درخواست باز پیدا نشد');
 
+    const skillIds = request.skills.map((item) => item.skillId);
+    if (!skillIds.length && !request.specialtyId) {
+      throw new NotFoundException('برای این درخواست تخصصی ثبت نشده است');
+    }
+
     const provider = await this.prisma.providerProfile.findFirst({
       where: {
         id: dto.providerProfileId,
         verificationStatus: 'APPROVED',
         isAvailable: true,
-        skills: {
-          some: { skillId: { in: request.skills.map((item) => item.skillId) } },
-        },
+        OR: [
+          ...(request.specialtyId
+            ? [{ specialties: { some: { specialtyId: request.specialtyId } } }]
+            : []),
+          ...(skillIds.length
+            ? [{ skills: { some: { skillId: { in: skillIds } } } }]
+            : []),
+        ],
       },
       select: { id: true },
     });
@@ -213,9 +192,10 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
       where: { id },
       include: {
         skills: { include: { skill: true } },
+        specialty: { select: { name: true } },
         images: true,
         acceptedProviderProfile: {
-          include: { user: { select: { name: true, phone: true } } },
+          include: { user: { select: { name: true } } },
         },
       },
     });
@@ -237,6 +217,7 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
       title: dto.title,
       description: dto.description,
       skillName: dto.skillName,
+      specialtyId: dto.specialtyId,
       address: dto.address,
       latitude: dto.latitude,
       longitude: dto.longitude,
@@ -245,13 +226,15 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
       budgetMin: dto.budgetMin,
       budgetMax: dto.budgetMax,
     });
-    void this.matchProviders.execute(request.id).catch((error) =>
-  this.logger.error(
-    `Matching failed for request ${request.id}`,
-    error instanceof Error ? error.stack : String(error),
-  ),
-);
-   return ServiceRequestResponseDto.fromEntity(request);
+    void this.matchProviders
+      .execute(request.id)
+      .catch((error) =>
+        this.logger.error(
+          `Matching failed for request ${request.id}`,
+          error instanceof Error ? error.stack : String(error),
+        ),
+      );
+    return ServiceRequestResponseDto.fromEntity(request);
   }
 
   @ApiOperation({ summary: 'Add a required skill to your service request' })
@@ -311,13 +294,19 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
     longitude: number | null;
     budgetMin: number | null;
     budgetMax: number | null;
+    providerPriceToman: number | null;
+    providerPricingMode: 'QUOTE' | 'HOURLY' | null;
+    providerHourlyRateToman: number | null;
+    providerHourlyUnitLabel: string | null;
+    providerEstimatedHours: number | null;
     scheduledAt: Date | null;
     createdAt: Date;
     skills: { skill: { name: string } }[];
+    specialty: { name: string } | null;
     images: { id: string; url: string }[];
     acceptedProviderProfile: {
       rating: number;
-      user: { name: string; phone: string };
+      user: { name: string };
     } | null;
   }) {
     const provider = request.acceptedProviderProfile;
@@ -325,17 +314,21 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
       {
         OPEN: 'awaiting_offers',
         OFFER_ACCEPTED: 'offers_received',
+        CUSTOMER_CONFIRMATION_PENDING: 'awaiting_payment',
         IN_PROGRESS: 'in_progress',
+        AWAITING_CUSTOMER_CONFIRMATION: 'awaiting_confirmation',
         COMPLETED: 'completed',
         CANCELLED: 'cancelled',
         EXPIRED: 'cancelled',
-        DISPUTED: 'in_progress',
+        DISPUTED: 'disputed',
       }[request.status] ?? 'awaiting_offers';
     return {
       id: request.id,
       code: `R-${request.id.slice(0, 8).toUpperCase()}`,
       title: request.title,
-      category: request.skills.map((item) => item.skill.name).join('، '),
+      category:
+        request.specialty?.name ??
+        request.skills.map((item) => item.skill.name).join('، '),
       description: request.description,
       addressLabel: request.address ?? '',
       latitude: request.latitude,
@@ -348,14 +341,30 @@ getMine(@CurrentUser() currentUser: TokenPayload) {
         request.budgetMin !== null && request.budgetMax !== null
           ? { min: request.budgetMin, max: request.budgetMax }
           : undefined,
-      price: request.budgetMax ?? request.budgetMin ?? undefined,
+      price:
+        request.providerPriceToman ??
+        request.budgetMax ??
+        request.budgetMin ??
+        undefined,
+      priceDetails:
+        request.providerPricingMode === 'HOURLY'
+          ? {
+              mode: 'HOURLY',
+              hourlyRateToman: request.providerHourlyRateToman,
+              hourlyUnitLabel: request.providerHourlyUnitLabel,
+              estimatedHours: request.providerEstimatedHours,
+            }
+          : request.providerPricingMode === 'QUOTE'
+            ? { mode: 'QUOTE' }
+            : undefined,
       specialist: provider
         ? {
             id: request.id,
             name: provider.user.name,
-            field: request.skills.map((item) => item.skill.name).join('، '),
+            field:
+              request.specialty?.name ??
+              request.skills.map((item) => item.skill.name).join('، '),
             rating: provider.rating,
-            phone: provider.user.phone,
           }
         : undefined,
       images: request.images.map((image) => image.url),

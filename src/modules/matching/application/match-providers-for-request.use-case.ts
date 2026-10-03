@@ -3,9 +3,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { INITIAL_BATCH_SIZE, MAX_RADIUS_KM } from '../matching.constants';
 import { MATCHING_REPOSITORY } from '../domain/matching.repository.token';
 import type { MatchingRepository } from '../domain/matching.repository';
-import { NOTIFICATION_PORT } from '../domain/notification.port';
-import type { NotificationPort } from '../domain/notification.port';
 import { rankCandidates } from '../domain/provider-ranking';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class MatchProvidersForRequestUseCase {
@@ -14,8 +13,7 @@ export class MatchProvidersForRequestUseCase {
   constructor(
     @Inject(MATCHING_REPOSITORY)
     private readonly repository: MatchingRepository,
-    @Inject(NOTIFICATION_PORT)
-    private readonly notifier: NotificationPort,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async execute(requestId: string): Promise<void> {
@@ -24,6 +22,7 @@ export class MatchProvidersForRequestUseCase {
 
     const candidates = await this.repository.findCandidates(
       requestId,
+      criteria.specialtyId,
       criteria.skillIds,
     );
     const selected = rankCandidates(criteria, candidates, {
@@ -36,9 +35,17 @@ export class MatchProvidersForRequestUseCase {
     const pending = await this.repository.findUnnotified(requestId);
     for (const invitation of pending) {
       try {
-        await this.notifier.notifyNewRequest({
-          phone: invitation.providerPhone,
-          distanceKm: invitation.distanceKm,
+        const distance =
+          invitation.distanceKm === null
+            ? 'فاصله نامشخص'
+            : `حدود ${invitation.distanceKm} کیلومتر فاصله`;
+        await this.notifications.createForUser({
+          userId: invitation.providerUserId,
+          category: 'OPPORTUNITIES',
+          type: 'NEW_OPPORTUNITY',
+          title: 'درخواست کاری جدید',
+          body: `درخواست «${invitation.requestTitle}» برای تخصص شما ثبت شده است (${distance}).`,
+          serviceRequestId: invitation.requestId,
         });
         await this.repository.markNotified(invitation.invitationId);
       } catch (error) {

@@ -57,7 +57,11 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
     const [records, total] = await this.prisma.$transaction([
       this.prisma.serviceRequest.findMany({
         where,
-        include: { skills: true, images: true },
+        include: {
+          skills: true,
+          images: true,
+          specialty: { select: { name: true } },
+        },
         orderBy: { [f.sortBy]: f.sortOrder },
         skip: (f.page - 1) * f.pageSize,
         take: f.pageSize,
@@ -76,6 +80,7 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
         data: {
           id: request.id,
           customerId: request.customerId,
+          specialtyId: request.specialtyId,
           title: request.title,
           description: request.description,
           status: request.status as unknown as any,
@@ -152,7 +157,11 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
   async findById(id: string): Promise<ServiceRequest | null> {
     const record = await this.prisma.serviceRequest.findUnique({
       where: { id },
-      include: { skills: true, images: true },
+      include: {
+        skills: true,
+        images: true,
+        specialty: { select: { name: true } },
+      },
     });
 
     if (!record) {
@@ -165,7 +174,11 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
   async findByCustomerId(customerId: string): Promise<ServiceRequest[]> {
     const records = await this.prisma.serviceRequest.findMany({
       where: { customerId },
-      include: { skills: true, images: true },
+      include: {
+        skills: true,
+        images: true,
+        specialty: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -182,7 +195,11 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
           },
         },
       },
-      include: { skills: true, images: true },
+      include: {
+        skills: true,
+        images: true,
+        specialty: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -207,6 +224,8 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
       record.createdAt,
       record.updatedAt,
       record.scheduledAt ?? null,
+      record.specialtyId ?? null,
+      record.specialty?.name ?? null,
     );
   }
 }

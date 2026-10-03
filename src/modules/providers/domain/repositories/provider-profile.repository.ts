@@ -21,6 +21,14 @@ export interface ProviderProfileDetails {
   updatedAt: Date;
   user: { name: string; email: string; phone: string };
   skills: { id: string; name: string }[];
+  specialties: {
+    id: string;
+    name: string;
+    slug: string;
+    icon: string | null;
+    groupId: string;
+    groupName: string;
+  }[];
   workingHours: ProviderWorkingHourSlot[];
 }
 
@@ -32,6 +40,12 @@ export interface ProviderProfileRepository {
   findById(id: string): Promise<ProviderProfile | null>;
 
   findDetailsByUserId(userId: string): Promise<ProviderProfileDetails | null>;
+
+  findActiveSpecialtyIds(specialtyIds: string[]): Promise<string[]>;
+  replaceSpecialties(
+    providerProfileId: string,
+    specialtyIds: string[],
+  ): Promise<void>;
 
   findMatchingBySkillIds(skillIds: string[]): Promise<ProviderProfile[]>;
 

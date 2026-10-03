@@ -21,6 +21,9 @@ export class ServiceRequestResponseDto {
   @ApiProperty({ type: [String] })
   skillIds!: string[];
 
+  @ApiProperty({ nullable: true, type: String })
+  specialtyId!: string | null;
+
   static fromEntity(request: ServiceRequest): ServiceRequestResponseDto {
     const dto = new ServiceRequestResponseDto();
     dto.id = request.id;
@@ -29,6 +32,7 @@ export class ServiceRequestResponseDto {
     dto.description = request.description;
     dto.status = request.status;
     dto.skillIds = request.skillIds;
+    dto.specialtyId = request.specialtyId;
     return dto;
   }
 }
