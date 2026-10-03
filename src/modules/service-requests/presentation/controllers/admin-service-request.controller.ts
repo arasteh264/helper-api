@@ -1,13 +1,13 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
-// import { AdminGuard } from '...';  ← گارد نقش ادمین خودت
+import { AdminGuard } from '../../../auth/presentation/guards/admin.guard';
 import { AdminListServiceRequestsUseCase } from '../../application/admin-list-service-requests.use-case';
 import { AdminListServiceRequestsQueryDto } from '../../application/dto/admin-list-service-requests-query.dto';
 
 @ApiTags('Admin - Service Requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard /*, AdminGuard */)
+@UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/service-requests')
 export class AdminServiceRequestController {
   constructor(private readonly listUseCase: AdminListServiceRequestsUseCase) {}

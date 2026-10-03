@@ -13,6 +13,13 @@ import {
 } from './application/wallet-configuration.use-cases';
 import { WALLET_REPOSITORY } from './domain/repositories/wallet.repository.token';
 import { PrismaWalletRepository } from './infrastructure/repositories/prisma-wallet.repository';
+import { ListMyPayoutRequestsUseCase } from './application/list-my-payout-requests.use-case';
+import {
+  GetPlatformAccountingSummaryUseCase,
+  ListPlatformWalletTransactionsUseCase,
+  ListPayoutRequestsUseCase,
+  ReviewPayoutRequestUseCase,
+} from './application/admin-wallet-accounting.use-cases';
 
 @Module({
   controllers: [ProviderWalletController, AdminWalletController],
@@ -25,6 +32,11 @@ import { PrismaWalletRepository } from './infrastructure/repositories/prisma-wal
     CreatePayoutRequestUseCase,
     GetWalletConfigurationUseCase,
     UpdateWalletCommissionRateUseCase,
+    ListMyPayoutRequestsUseCase,
+    GetPlatformAccountingSummaryUseCase,
+    ListPlatformWalletTransactionsUseCase,
+    ListPayoutRequestsUseCase,
+    ReviewPayoutRequestUseCase,
     { provide: WALLET_REPOSITORY, useClass: PrismaWalletRepository },
   ],
   exports: [CreditProviderWalletUseCase],

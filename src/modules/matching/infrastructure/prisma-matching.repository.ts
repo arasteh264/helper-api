@@ -22,12 +22,13 @@ export class PrismaMatchingRepository implements MatchingRepository {
       request.status !== 'OPEN' ||
       request.latitude === null ||
       request.longitude === null ||
-      request.skills.length === 0
+      (!request.specialtyId && request.skills.length === 0)
     ) {
       return null;
     }
     return {
       requestId: request.id,
+      specialtyId: request.specialtyId,
       skillIds: request.skills.map((s) => s.skillId),
       latitude: request.latitude,
       longitude: request.longitude,
@@ -36,6 +37,7 @@ export class PrismaMatchingRepository implements MatchingRepository {
 
   async findCandidates(
     requestId: string,
+    specialtyId: string | null,
     skillIds: string[],
   ): Promise<ProviderCandidate[]> {
     const providers = await this.prisma.providerProfile.findMany({
@@ -44,7 +46,12 @@ export class PrismaMatchingRepository implements MatchingRepository {
         isAvailable: true,
         serviceAreaLatitude: { not: null },
         serviceAreaLongitude: { not: null },
-        skills: { some: { skillId: { in: skillIds } } },
+        OR: [
+          ...(specialtyId ? [{ specialties: { some: { specialtyId } } }] : []),
+          ...(skillIds.length
+            ? [{ skills: { some: { skillId: { in: skillIds } } } }]
+            : []),
+        ],
         requestDeclines: { none: { serviceRequestId: requestId } },
       },
       select: {
@@ -77,15 +84,22 @@ export class PrismaMatchingRepository implements MatchingRepository {
 
   async findUnnotified(requestId: string): Promise<PendingNotification[]> {
     const rows = await this.prisma.providerRequestInvitation.findMany({
-      where: { serviceRequestId: requestId, status: 'PENDING', notifiedAt: null },
+      where: {
+        serviceRequestId: requestId,
+        status: 'PENDING',
+        notifiedAt: null,
+      },
       include: {
-        providerProfile: { include: { user: { select: { phone: true } } } },
+        providerProfile: { select: { userId: true } },
+        serviceRequest: { select: { id: true, title: true } },
       },
     });
     return rows.map((r) => ({
       invitationId: r.id,
-      providerPhone: r.providerProfile.user.phone,
+      providerUserId: r.providerProfile.userId,
       distanceKm: r.distanceKm,
+      requestTitle: r.serviceRequest.title,
+      requestId: r.serviceRequest.id,
     }));
   }
 

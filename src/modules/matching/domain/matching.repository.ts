@@ -1,6 +1,7 @@
 // domain/matching.repository.ts
 export interface MatchingCriteria {
   requestId: string;
+  specialtyId: string | null;
   skillIds: string[];
   latitude: number;
   longitude: number;
@@ -14,8 +15,10 @@ export interface ProviderCandidate {
 
 export interface PendingNotification {
   invitationId: string;
-  providerPhone: string;
+  providerUserId: string;
   distanceKm: number | null;
+  requestTitle: string;
+  requestId: string;
 }
 
 export interface MatchingRepository {
@@ -23,6 +26,7 @@ export interface MatchingRepository {
   getCriteria(requestId: string): Promise<MatchingCriteria | null>;
   findCandidates(
     requestId: string,
+    specialtyId: string | null,
     skillIds: string[],
   ): Promise<ProviderCandidate[]>;
   createInvitations(

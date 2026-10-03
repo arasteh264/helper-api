@@ -33,9 +33,11 @@ import { RemoveSkillFromProviderUseCase } from './application/skills/remove-skil
 import { UploadProviderDocumentUseCase } from './application/documents/upload-provider-document.use-case';
 import { GetMyDocumentsUseCase } from './application/documents/get-my-documents.use-case';
 import { ReviewProviderDocumentUseCase } from './application/documents/review-provider-document.use-case';
+import { SetProviderSpecialtiesUseCase } from './application/specialties/set-provider-specialties.use-case';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [StorageModule, UsersModule],
+  imports: [StorageModule, UsersModule, NotificationsModule],
   controllers: [
     ProviderProfileController,
     AdminProviderController,
@@ -60,6 +62,7 @@ import { ReviewProviderDocumentUseCase } from './application/documents/review-pr
     GetMyDocumentsUseCase,
     GetProviderDocumentsForReviewUseCase,
     ReviewProviderDocumentUseCase,
+    SetProviderSpecialtiesUseCase,
     ProviderJobsUseCase,
     {
       provide: PROVIDER_PROFILE_REPOSITORY,

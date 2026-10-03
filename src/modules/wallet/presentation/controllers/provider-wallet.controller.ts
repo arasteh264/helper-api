@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
@@ -9,6 +17,9 @@ import { GetBankAccountUseCase } from '../../application/get-bank-account.use-ca
 import { ListWalletTransactionsQueryDto } from '../../application/dto/list-wallet-transactions-query.dto';
 import { CreatePayoutRequestUseCase } from '../../application/create-payout-request.use-case';
 import { CreatePayoutRequestDto } from '../../application/dto/create-payout-request.dto';
+import { ListMyPayoutRequestsUseCase } from '../../application/list-my-payout-requests.use-case';
+import { UpsertBankAccountUseCase } from '../../application/upsert-bank-account.use-case';
+import { UpsertBankAccountDto } from '../../application/dto/upsert-bank-account.dto';
 
 @ApiTags('Provider Wallet')
 @ApiBearerAuth()
@@ -20,6 +31,8 @@ export class ProviderWalletController {
     private readonly listTransactionsUseCase: ListWalletTransactionsUseCase,
     private readonly getBankAccountUseCase: GetBankAccountUseCase,
     private readonly createPayoutRequestUseCase: CreatePayoutRequestUseCase,
+    private readonly listMyPayoutRequestsUseCase: ListMyPayoutRequestsUseCase,
+    private readonly upsertBankAccountUseCase: UpsertBankAccountUseCase,
   ) {}
 
   @ApiOperation({
@@ -54,6 +67,15 @@ export class ProviderWalletController {
     return this.getBankAccountUseCase.execute(user.userId);
   }
 
+  @ApiOperation({ summary: 'Set or update my payout bank account' })
+  @Put('bank-account')
+  upsertBankAccount(
+    @CurrentUser() user: TokenPayload,
+    @Body() dto: UpsertBankAccountDto,
+  ) {
+    return this.upsertBankAccountUseCase.execute(user.userId, dto);
+  }
+
   @ApiOperation({ summary: 'Request a wallet withdrawal' })
   @Post('payouts')
   createPayoutRequest(
@@ -61,5 +83,11 @@ export class ProviderWalletController {
     @Body() dto: CreatePayoutRequestDto,
   ) {
     return this.createPayoutRequestUseCase.execute(user.userId, dto.amount);
+  }
+
+  @ApiOperation({ summary: 'List my payout requests and review results' })
+  @Get('payouts')
+  listPayoutRequests(@CurrentUser() user: TokenPayload) {
+    return this.listMyPayoutRequestsUseCase.execute(user.userId);
   }
 }

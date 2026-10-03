@@ -1,6 +1,9 @@
 import { PreferredTime } from './preferred-time.enum';
 import { ServiceRequestStatus } from './service-request-status.enum';
 export class ServiceRequest {
+  private _specialtyId: string | null = null;
+  private _specialtyName: string | null = null;
+
   private constructor(
     public readonly id: string,
     public readonly customerId: string,
@@ -64,8 +67,10 @@ export class ServiceRequest {
     createdAt: Date,
     updatedAt: Date,
     scheduledAt: Date | null = null,
+    specialtyId: string | null = null,
+    specialtyName: string | null = null,
   ): ServiceRequest {
-    return new ServiceRequest(
+    const request = new ServiceRequest(
       id,
       customerId,
       title,
@@ -83,6 +88,9 @@ export class ServiceRequest {
       updatedAt,
       scheduledAt,
     );
+    request._specialtyId = specialtyId;
+    request._specialtyName = specialtyName;
+    return request;
   }
 
   get title(): string {
@@ -96,6 +104,12 @@ export class ServiceRequest {
   }
   get skillIds(): string[] {
     return this._skillIds;
+  }
+  get specialtyId(): string | null {
+    return this._specialtyId;
+  }
+  get specialtyName(): string | null {
+    return this._specialtyName;
   }
   get address(): string | null {
     return this._address;
@@ -133,6 +147,11 @@ export class ServiceRequest {
     this._address = address;
     this._latitude = latitude;
     this._longitude = longitude;
+    this._updatedAt = new Date();
+  }
+
+  setSpecialty(specialtyId: string): void {
+    this._specialtyId = specialtyId;
     this._updatedAt = new Date();
   }
 

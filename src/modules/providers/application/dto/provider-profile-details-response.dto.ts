@@ -20,6 +20,26 @@ class ProviderSkillDto {
   name!: string;
 }
 
+class ProviderSpecialtyDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiProperty()
+  slug!: string;
+
+  @ApiProperty({ nullable: true, type: String })
+  icon!: string | null;
+
+  @ApiProperty()
+  groupId!: string;
+
+  @ApiProperty()
+  groupName!: string;
+}
+
 class ProviderWorkingHourDto {
   @ApiProperty()
   dayOfWeek!: number;
@@ -74,6 +94,9 @@ export class ProviderProfileDetailsResponseDto {
   @ApiProperty({ type: [ProviderSkillDto] })
   skills!: ProviderSkillDto[];
 
+  @ApiProperty({ type: [ProviderSpecialtyDto] })
+  specialties!: ProviderSpecialtyDto[];
+
   @ApiProperty({ type: [ProviderWorkingHourDto] })
   workingHours!: ProviderWorkingHourDto[];
 
@@ -98,6 +121,7 @@ export class ProviderProfileDetailsResponseDto {
       serviceAreaLongitude: d.serviceAreaLongitude,
       user: d.user,
       skills: d.skills,
+      specialties: d.specialties,
       workingHours: d.workingHours,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,

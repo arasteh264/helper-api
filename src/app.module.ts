@@ -10,6 +10,9 @@ import { ServiceRequestsModule } from './modules/service-requests/service-reques
 import { StorageModule } from './shared/storage/storage.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { SpecialtiesModule } from './modules/specialties/specialties.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { CustomersModule } from './modules/customers/customers.module';
     ServiceRequestsModule,
     WalletModule,
     CustomersModule,
+    SpecialtiesModule,
+    PaymentsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

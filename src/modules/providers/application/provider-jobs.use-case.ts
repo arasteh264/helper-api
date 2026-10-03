@@ -1,18 +1,24 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import type { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { PRISMA_SERVICE } from '../../../infrastructure/database/prisma.service.token';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class ProviderJobsUseCase {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PRISMA_SERVICE) private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async list(userId: string) {
     const profile = await this.getProfile(userId);
-    const skillIds = profile.skills.map((skill) => skill.skillId);
 
     const [invitations, assigned, declinedInvitations] = await Promise.all([
       this.prisma.providerRequestInvitation.findMany({
@@ -24,6 +30,7 @@ export class ProviderJobsUseCase {
         include: {
           serviceRequest: {
             include: {
+              specialty: { select: { name: true } },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
             },
@@ -36,8 +43,10 @@ export class ProviderJobsUseCase {
           acceptedProviderProfileId: profile.id,
           status: {
             in: [
+              'CUSTOMER_CONFIRMATION_PENDING',
               'OFFER_ACCEPTED',
               'IN_PROGRESS',
+              'AWAITING_CUSTOMER_CONFIRMATION',
               'COMPLETED',
               'CANCELLED',
               'EXPIRED',
@@ -46,6 +55,7 @@ export class ProviderJobsUseCase {
           },
         },
         include: {
+          specialty: { select: { name: true } },
           skills: { include: { skill: true } },
           images: { select: { url: true } },
         },
@@ -56,6 +66,7 @@ export class ProviderJobsUseCase {
         include: {
           serviceRequest: {
             include: {
+              specialty: { select: { name: true } },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
             },
@@ -88,7 +99,7 @@ export class ProviderJobsUseCase {
     const customers = customerIds.length
       ? await this.prisma.user.findMany({
           where: { id: { in: customerIds } },
-          select: { id: true, name: true, phone: true },
+          select: { id: true, name: true },
         })
       : [];
     const customerById = new Map(
@@ -97,20 +108,30 @@ export class ProviderJobsUseCase {
 
     return records.map(({ request, viewStatus }) => {
       const customer = customerById.get(request.customerId);
-      const showContact =
-        viewStatus === 'accepted' || viewStatus === 'in_progress';
+      const canSeeAddress =
+        viewStatus === 'accepted' ||
+        viewStatus === 'in_progress' ||
+        viewStatus === 'awaiting_confirmation';
       return {
         id: request.id,
         title: request.title,
         service:
-          request.skills.map((item) => item.skill.name).join('، ') || 'عمومی',
+          request.specialty?.name ??
+          (request.skills.map((item) => item.skill.name).join('، ') || 'عمومی'),
         customerName: customer?.name ?? 'مشتری',
-        ...(showContact && customer?.phone
-          ? { customerPhone: customer.phone }
-          : {}),
-        address: request.address ?? 'آدرس پس از هماهنگی نمایش داده می‌شود',
+        address: canSeeAddress
+          ? (request.address ?? 'آدرس ثبت نشده است')
+          : 'آدرس پس از پرداخت نمایش داده می‌شود',
         scheduledAt: (request.scheduledAt ?? request.createdAt).toISOString(),
-        price: request.budgetMax ?? request.budgetMin ?? 0,
+        price:
+          request.providerPriceToman ??
+          request.budgetMax ??
+          request.budgetMin ??
+          0,
+        pricingMode: request.providerPricingMode,
+        hourlyRateToman: request.providerHourlyRateToman,
+        hourlyUnitLabel: request.providerHourlyUnitLabel,
+        estimatedHours: request.providerEstimatedHours,
         status: viewStatus,
         note: request.description,
         images: request.images.map((image) => image.url),
@@ -118,15 +139,70 @@ export class ProviderJobsUseCase {
     });
   }
 
-  async accept(userId: string, requestId: string) {
+  async accept(
+    userId: string,
+    requestId: string,
+    proposedPriceToman?: number,
+    estimatedHours?: number,
+  ) {
     const profile = await this.getApprovedProfile(userId);
-    if (profile.skills.length === 0) {
-      throw new ConflictException(
-        'برای دریافت کار، ابتدا تخصص خود را ثبت کنید',
-      );
-    }
-
+    let acceptedPriceToman = 0;
+    let pricingMode: 'QUOTE' | 'HOURLY' = 'QUOTE';
+    let hourlyRateToman: number | null = null;
+    let hourlyUnitLabel: string | null = null;
+    let acceptedEstimatedHours: number | null = null;
+    let customerId = '';
+    let requestTitle = '';
     await this.prisma.$transaction(async (db) => {
+      const request = await db.serviceRequest.findFirst({
+        where: {
+          id: requestId,
+          status: 'OPEN',
+          acceptedProviderProfileId: null,
+        },
+        select: {
+          id: true,
+          customerId: true,
+          title: true,
+          specialty: {
+            select: {
+              pricingMode: true,
+              hourlyRateToman: true,
+              hourlyUnitLabel: true,
+            },
+          },
+        },
+      });
+      if (!request) {
+        throw new ConflictException('درخواست دیگر برای پذیرش در دسترس نیست');
+      }
+      customerId = request.customerId;
+      requestTitle = request.title;
+
+      pricingMode = request.specialty?.pricingMode ?? 'QUOTE';
+      if (pricingMode === 'HOURLY') {
+        if (!estimatedHours || estimatedHours <= 0) {
+          throw new BadRequestException('تعداد ساعت تخمینی الزامی است');
+        }
+        if (!request.specialty?.hourlyRateToman) {
+          throw new ConflictException('نرخ ساعتی این تخصص تنظیم نشده است');
+        }
+        hourlyRateToman = request.specialty.hourlyRateToman;
+        hourlyUnitLabel = request.specialty.hourlyUnitLabel;
+        acceptedEstimatedHours = estimatedHours;
+        acceptedPriceToman = Math.round(hourlyRateToman * estimatedHours);
+      } else {
+        if (!proposedPriceToman || proposedPriceToman <= 0) {
+          throw new BadRequestException(
+            'مبلغ پیشنهادی باید بزرگ‌تر از صفر باشد',
+          );
+        }
+        acceptedPriceToman = proposedPriceToman;
+      }
+      if (!Number.isSafeInteger(acceptedPriceToman)) {
+        throw new BadRequestException('مبلغ نهایی معتبر نیست');
+      }
+
       const invitation = await db.providerRequestInvitation.findUnique({
         where: {
           providerProfileId_serviceRequestId: {
@@ -146,8 +222,13 @@ export class ProviderJobsUseCase {
           acceptedProviderProfileId: null,
         },
         data: {
-          status: 'OFFER_ACCEPTED',
+          status: 'CUSTOMER_CONFIRMATION_PENDING',
           acceptedProviderProfileId: profile.id,
+          providerPriceToman: acceptedPriceToman,
+          providerPricingMode: pricingMode,
+          providerHourlyRateToman: hourlyRateToman,
+          providerHourlyUnitLabel: hourlyUnitLabel,
+          providerEstimatedHours: acceptedEstimatedHours,
         },
       });
       if (result.count === 0) {
@@ -167,7 +248,22 @@ export class ProviderJobsUseCase {
         data: { status: 'WITHDRAWN', respondedAt: new Date() },
       });
     });
-    return { message: 'درخواست پذیرفته شد' };
+    await this.notifications.createForUser({
+      userId: customerId,
+      category: 'OPPORTUNITIES',
+      type: 'PROVIDER_OFFER',
+      title: 'پیشنهاد قیمت متخصص',
+      body: `برای درخواست «${requestTitle}» پیشنهاد قیمت جدید ثبت شده است.`,
+      serviceRequestId: requestId,
+    });
+    return {
+      message: 'پیشنهاد قیمت برای مشتری ارسال شد',
+      proposedPriceToman: acceptedPriceToman,
+      pricingMode,
+      hourlyRateToman,
+      hourlyUnitLabel,
+      estimatedHours: acceptedEstimatedHours,
+    };
   }
 
   async decline(userId: string, requestId: string) {
@@ -200,8 +296,8 @@ export class ProviderJobsUseCase {
       userId,
       requestId,
       'IN_PROGRESS',
-      'COMPLETED',
-      'کار تکمیل شد',
+      'AWAITING_CUSTOMER_CONFIRMATION',
+      'کار برای تأیید مشتری ارسال شد',
     );
   }
 
@@ -209,7 +305,7 @@ export class ProviderJobsUseCase {
     userId: string,
     requestId: string,
     currentStatus: 'OFFER_ACCEPTED' | 'IN_PROGRESS',
-    nextStatus: 'IN_PROGRESS' | 'COMPLETED',
+    nextStatus: 'IN_PROGRESS' | 'AWAITING_CUSTOMER_CONFIRMATION',
     message: string,
   ) {
     const profile = await this.getApprovedProfile(userId);
@@ -218,11 +314,27 @@ export class ProviderJobsUseCase {
         id: requestId,
         acceptedProviderProfileId: profile.id,
         status: currentStatus,
+        payments: { some: { status: 'PAID' } },
       },
       data: { status: nextStatus },
     });
     if (!result.count)
       throw new ConflictException('وضعیت این کار تغییر کرده است');
+    const request = await this.prisma.serviceRequest.findUniqueOrThrow({
+      where: { id: requestId },
+      select: { customerId: true, title: true },
+    });
+    await this.notifications.createForUser({
+      userId: request.customerId,
+      category: 'WORK_UPDATES',
+      type: 'SERVICE_REQUEST_STATUS',
+      title: 'وضعیت درخواست به‌روز شد',
+      body:
+        nextStatus === 'IN_PROGRESS'
+          ? `کار «${request.title}» شروع شد.`
+          : `متخصص کار «${request.title}» را برای تأیید شما تکمیل کرد.`,
+      serviceRequestId: requestId,
+    });
     return { message };
   }
 
@@ -250,13 +362,25 @@ export class ProviderJobsUseCase {
 
   private toViewStatus(
     status: string,
-  ): 'accepted' | 'in_progress' | 'completed' | 'cancelled' {
+  ):
+    | 'awaiting_payment'
+    | 'accepted'
+    | 'in_progress'
+    | 'awaiting_confirmation'
+    | 'disputed'
+    | 'completed'
+    | 'cancelled' {
     switch (status) {
+      case 'CUSTOMER_CONFIRMATION_PENDING':
+        return 'awaiting_payment';
       case 'OFFER_ACCEPTED':
         return 'accepted';
       case 'IN_PROGRESS':
-      case 'DISPUTED':
         return 'in_progress';
+      case 'AWAITING_CUSTOMER_CONFIRMATION':
+        return 'awaiting_confirmation';
+      case 'DISPUTED':
+        return 'disputed';
       case 'COMPLETED':
         return 'completed';
       default:

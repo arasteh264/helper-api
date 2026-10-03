@@ -16,7 +16,7 @@ export class SmsService {
       return;
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       this.api.Send(
         {
           message: `Your verification code is: ${code}\nThis code is valid for 2 minutes.`,
@@ -29,6 +29,29 @@ export class SmsService {
               `Kavenegar failed; OTP was only logged. status=${status} response=${JSON.stringify(response)}`,
             );
             resolve();
+            return;
+          }
+          resolve();
+        },
+      );
+    });
+  }
+
+  async sendNotification(phone: string, message: string): Promise<void> {
+    if (!process.env.KAVENEGAR_API_KEY || !process.env.KAVENEGAR_SENDER) {
+      throw new Error('Kavenegar notification settings are missing');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      this.api.Send(
+        {
+          message,
+          sender: process.env.KAVENEGAR_SENDER,
+          receptor: phone,
+        },
+        (response: unknown, status: number) => {
+          if (status !== 200) {
+            reject(new Error(`Kavenegar notification failed: ${status}`));
             return;
           }
           resolve();

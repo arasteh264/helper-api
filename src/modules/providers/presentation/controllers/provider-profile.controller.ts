@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -30,9 +31,7 @@ import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 
-
 import { GetApprovedProvidersUseCase } from '../../application/get-approved-providers.use-case';
-
 
 import { CreateProviderProfileDto } from '../../application/dto/create-provider-profile.dto';
 import { AddSkillDto } from '../../application/dto/add-skill.dto';
@@ -54,7 +53,8 @@ import { UploadProviderDocumentUseCase } from '../../application/documents/uploa
 import { GetMyDocumentsUseCase } from '../../application/documents/get-my-documents.use-case';
 import { RemoveSkillFromProviderUseCase } from '../../application/skills/remove-skill-from-provider.use-case';
 import { CreateProviderProfileUseCase } from '../../application/profile/create-provider-profile.use-case';
-
+import { SetProviderSpecialtiesUseCase } from '../../application/specialties/set-provider-specialties.use-case';
+import { SetProviderSpecialtiesDto } from '../../application/dto/set-provider-specialties.dto';
 
 @ApiTags('Providers')
 @ApiBearerAuth()
@@ -77,6 +77,7 @@ export class ProviderProfileController {
     private readonly deletePortfolioItemImageUseCase: DeletePortfolioItemImageUseCase,
     private readonly uploadProviderDocumentUseCase: UploadProviderDocumentUseCase,
     private readonly getMyDocumentsUseCase: GetMyDocumentsUseCase,
+    private readonly setProviderSpecialtiesUseCase: SetProviderSpecialtiesUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Get all approved providers' })
@@ -112,6 +113,18 @@ export class ProviderProfileController {
     @Body() dto: UpdateProviderProfileDto,
   ) {
     return this.updateProfileUseCase.execute(currentUser.userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Replace my selected specialties' })
+  @Put('profile/specialties')
+  setSpecialties(
+    @CurrentUser() currentUser: TokenPayload,
+    @Body() dto: SetProviderSpecialtiesDto,
+  ) {
+    return this.setProviderSpecialtiesUseCase.execute(
+      currentUser.userId,
+      dto.specialtyIds,
+    );
   }
 
   @ApiOperation({ summary: 'Add a skill to your provider profile' })

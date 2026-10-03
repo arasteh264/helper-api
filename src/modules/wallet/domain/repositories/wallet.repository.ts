@@ -5,7 +5,12 @@ export interface WalletSummary {
   id: string;
   balance: number;
   totalEarned: number;
+  totalNetEarned: number;
   totalWithdrawn: number;
+  totalCommission: number;
+  currentMonthEarned: number;
+  currentMonthNetEarned: number;
+  currentMonthCommission: number;
   pendingPayouts: number;
   commissionRate: number;
   minWithdrawal: number;
@@ -48,6 +53,49 @@ export interface CreditWalletInput {
   type: 'EARNING' | 'ADJUSTMENT';
   description?: string;
   serviceRequestId?: string;
+}
+
+export interface PayoutRequestView {
+  id: string;
+  providerProfileId: string;
+  providerName: string;
+  amount: number;
+  status: 'PENDING' | 'PAID' | 'REJECTED' | 'CANCELLED';
+  holderName: string;
+  sheba: string;
+  bankName: string | null;
+  referenceCode: string | null;
+  rejectReason: string | null;
+  createdAt: Date;
+  processedAt: Date | null;
+}
+
+export interface PayoutReviewInput {
+  payoutRequestId: string;
+  adminUserId: string;
+  decision: 'PAID' | 'REJECTED';
+  referenceCode?: string;
+  rejectReason?: string;
+}
+
+export interface PlatformWalletTransactionView extends WalletTransactionView {
+  providerProfileId: string;
+  providerName: string;
+}
+
+export interface PlatformAccountingSummary {
+  allTimePaidVolumeToman: number;
+  currentMonthPaidVolumeToman: number;
+  allTimePlatformCommissionToman: number;
+  currentMonthPlatformCommissionToman: number;
+  providerGrossEarningsToman: number;
+  currentMonthProviderGrossEarningsToman: number;
+  providerAvailableBalanceToman: number;
+  providerFundsHeldToman: number;
+  pendingPayoutAmountToman: number;
+  pendingPayoutCount: number;
+  totalPaidOutToman: number;
+  currentMonthPaidOutToman: number;
 }
 
 export type CreditResult =
@@ -99,4 +147,28 @@ export interface WalletRepository {
     status: string;
     createdAt: Date;
   }>;
+
+  listPayoutRequests(
+    page: number,
+    pageSize: number,
+    status?: 'PENDING' | 'PAID' | 'REJECTED' | 'CANCELLED',
+  ): Promise<{
+    items: PayoutRequestView[];
+    page: number;
+    pageSize: number;
+    total: number;
+  }>;
+  listMyPayoutRequests(userId: string): Promise<PayoutRequestView[]>;
+  reviewPayoutRequest(input: PayoutReviewInput): Promise<PayoutRequestView>;
+  getPlatformAccountingSummary(): Promise<PlatformAccountingSummary>;
+  listPlatformTransactions(
+    page: number,
+    pageSize: number,
+    filter: {
+      type?: WalletTransactionType;
+      direction?: 'in' | 'out';
+      createdFrom?: Date;
+      createdTo?: Date;
+    },
+  ): Promise<PaginatedResult<PlatformWalletTransactionView>>;
 }
