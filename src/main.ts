@@ -25,10 +25,15 @@ const configuredOrigins = [
         /^https:\/\/helper-customer-[a-z0-9-]+-arasteh264-6629s-projects\.vercel\.app$/i.test(
           origin ?? '',
         );
+      const isAdminPreviewOrigin =
+        /^https:\/\/helper-admin-panel-[a-z0-9-]+-arasteh264-6629s-projects\.vercel\.app$/i.test(
+          origin ?? '',
+        );
       const isAllowedOrigin =
         !origin ||
         isLocalOrigin ||
         isCustomerPreviewOrigin ||
+        isAdminPreviewOrigin ||
         configuredOrigins.includes(origin);
       callback(null, isAllowedOrigin);
     },
