@@ -167,11 +167,7 @@ export class ChatService {
     };
   }
 
-  async listAdminMessages(
-    conversationId: string,
-    page = 1,
-    pageSize = 20,
-  ) {
+  async listAdminMessages(conversationId: string, page = 1, pageSize = 20) {
     const conversation = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
       select: { id: true, status: true, pausedReason: true },
