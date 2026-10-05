@@ -5,16 +5,18 @@ import { ChatService } from './chat.service';
 type ChatPrismaMock = {
   serviceRequest: { findUnique: jest.Mock };
   providerProfile: { findUnique: jest.Mock };
-  chatConversation: { upsert: jest.Mock };
-  chatMessage: { create: jest.Mock; findMany: jest.Mock };
+  chatConversation: { findUnique: jest.Mock; upsert: jest.Mock };
+  chatMessage: { count: jest.Mock; create: jest.Mock; findMany: jest.Mock };
+  $transaction: jest.Mock;
 };
 
 function createFixture() {
   const prisma: ChatPrismaMock = {
     serviceRequest: { findUnique: jest.fn() },
     providerProfile: { findUnique: jest.fn() },
-    chatConversation: { upsert: jest.fn() },
-    chatMessage: { create: jest.fn(), findMany: jest.fn() },
+    chatConversation: { findUnique: jest.fn(), upsert: jest.fn() },
+    chatMessage: { count: jest.fn(), create: jest.fn(), findMany: jest.fn() },
+    $transaction: jest.fn(),
   };
   const notifications = {
     createForUser: jest.fn().mockResolvedValue(null),
@@ -108,5 +110,29 @@ describe('ChatService', () => {
       service.sendMessage('request-1', 'customer-1', 'سلام'),
     ).rejects.toThrow('گفتگو توسط ادمین متوقف شده است');
     expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('returns admin conversation messages in pages with the total count', async () => {
+    const { prisma, service } = createFixture();
+    prisma.chatConversation.findUnique.mockResolvedValue({
+      id: 'conversation-1',
+      status: 'ACTIVE',
+      pausedReason: null,
+    });
+    const messages = [{ id: 'message-21', body: 'سلام' }];
+    prisma.$transaction.mockResolvedValue([messages, 41]);
+
+    await expect(
+      service.listAdminMessages('conversation-1', 2, 20),
+    ).resolves.toMatchObject({
+      conversation: { id: 'conversation-1' },
+      messages,
+      page: 2,
+      pageSize: 20,
+      total: 41,
+    });
+    expect(prisma.chatMessage.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 20 }),
+    );
   });
 });

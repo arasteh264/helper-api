@@ -24,20 +24,18 @@ export class ReviewProviderDocumentUseCase {
     decision: 'APPROVED' | 'REJECTED',
     rejectionNote?: string,
   ) {
-    const document =
-      await this.providerDocumentRepository.findById(documentId);
+    const document = await this.providerDocumentRepository.findById(documentId);
     if (!document) throw new NotFoundException('Document not found');
 
-    if (decision === 'REJECTED' && !rejectionNote) {
-      throw new BadRequestException(
-        'rejectionNote is required when rejecting a document',
-      );
+    const normalizedRejectionNote = rejectionNote?.trim();
+    if (decision === 'REJECTED' && (normalizedRejectionNote?.length ?? 0) < 3) {
+      throw new BadRequestException('برای رد مدرک، دلیل معتبر الزامی است');
     }
 
     const updatedDocument = await this.providerDocumentRepository.updateStatus(
       documentId,
       decision,
-      decision === 'REJECTED' ? rejectionNote : null,
+      decision === 'REJECTED' ? normalizedRejectionNote! : null,
     );
 
     await this.syncProviderVerification(document.providerProfileId);

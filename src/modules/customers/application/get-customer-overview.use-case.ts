@@ -7,8 +7,6 @@ import type { CustomerWalletRepository } from '../domain/repositories/customer-w
 import { GetOrCreateCustomerProfileUseCase } from './get-or-create-customer-profile.use-case';
 import { ListMyServiceRequestsUseCase } from './list-my-service-requests.use-case';
 
-const FINISHED_STATUSES = ['completed', 'cancelled'];
-
 @Injectable()
 export class GetCustomerOverviewUseCase {
   constructor(
@@ -22,14 +20,15 @@ export class GetCustomerOverviewUseCase {
 
   async execute(userId: string) {
     const profile = await this.getOrCreateProfile.execute(userId);
-    const [overview, wallet, requests] = await Promise.all([
+    const [overview, wallet, requestsPage] = await Promise.all([
       this.overviewReader.read(userId),
       this.walletRepository.getOrCreate(profile.id),
-      this.listMyRequests.execute(userId),
+      this.listMyRequests.executePage(userId, {
+        page: 1,
+        pageSize: 5,
+        group: 'active',
+      }),
     ]);
-
-    const active = requests.filter((r) => !FINISHED_STATUSES.includes(r.status));
-    const completed = requests.filter((r) => r.status === 'completed');
 
     return {
       id: profile.id,
@@ -37,10 +36,10 @@ export class GetCustomerOverviewUseCase {
       name: overview.name,
       memberSince: overview.memberSince,
       walletBalance: wallet.balance,
-      activeRequests: active.length,
-      completedJobs: completed.length,
+      activeRequests: requestsPage.counts.active,
+      completedJobs: requestsPage.counts.completed,
       addressesCount: overview.addressesCount,
-      recentActiveRequests: active.slice(0, 5),
+      recentActiveRequests: requestsPage.items,
     };
   }
 }

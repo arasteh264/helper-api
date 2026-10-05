@@ -26,8 +26,11 @@ import { UpdateUserDto } from '../../application/dto/update-user.dto';
 import * as tokenGeneratorPort from '../../../auth/domain/services/token-generator.port';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
+import { AdminGuard } from '../../../auth/presentation/guards/admin.guard';
 import { VerifyRegistrationOtpDto } from '../../application/dto/verify-registration-otp.dto';
 import { VerifyRegistrationOtpUseCase } from '../../application/verify-registration-otp.use-case';
+import { PrismaService } from '../../../../infrastructure/database/prisma.service';
+import { SmsService } from '../../../sms/sms.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -38,6 +41,8 @@ export class UsersController {
     private readonly getAllUserUseCase: GetAllUserUseCase,
     private readonly updateUserUseCase: UpdateUserUseCase,
     private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
+    private readonly prisma: PrismaService,
+    private readonly smsService: SmsService,
   ) {}
 
   @ApiOperation({ summary: 'Create a new user' })
@@ -56,18 +61,54 @@ export class UsersController {
   @ApiOperation({ summary: 'Verify registration OTP and create user' })
   @Post('verify-otp')
   async verifyRegistrationOtp(@Body() dto: VerifyRegistrationOtpDto) {
-    const user = await this.verifyRegistrationOtpUseCase.execute(
-      dto.phone,
-      dto.code,
-    );
+    return this.verifyRegistrationOtpUseCase.execute(dto.phone, dto.code);
+  }
 
-    return UserResponseDto.fromEntity(user);
+  @ApiOperation({ summary: 'Resend OTP for a pending registration' })
+  @Post('resend-otp')
+  async resendRegistrationOtp(@Body() dto: { phone: string }) {
+    const pending = await this.prisma.pendingRegistration.findUnique({
+      where: { phone: dto.phone },
+    });
+
+    if (!pending) {
+      throw new NotFoundException(
+        'No pending registration found for this phone',
+      );
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 90 * 1000);
+
+    await this.prisma.pendingRegistration.update({
+      where: { id: pending.id },
+      data: { otpCode, otpExpiresAt },
+    });
+
+    await this.smsService.sendOtp(dto.phone, otpCode);
+
+    return { message: 'OTP sent' };
   }
 
   @ApiOperation({ summary: 'Get all user by  search ' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Get()
   async getAllUsers(@Query() query: PaginationQueryDto) {
-    return this.getAllUserUseCase.execute(query);
+    const result = await this.getAllUserUseCase.execute(query);
+    return {
+      ...result,
+      items: result.items.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      })),
+    };
   }
 
   @ApiOperation({ summary: 'Get current logged-in user' })
@@ -85,6 +126,8 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: 'Get user by id' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Get(':id')
   async getUser(@Param('id') id: string) {
     const user = await this.getUserUseCase.execute(id);
@@ -97,6 +140,8 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: 'Update user information' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Patch(':id')
   async update(
     @Param('id') id: string,

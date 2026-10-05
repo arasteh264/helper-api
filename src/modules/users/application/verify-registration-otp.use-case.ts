@@ -3,12 +3,13 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { User } from '../domain/entities/user.entity';
 import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
 import type { UserRepository } from '../domain/repositories/user.repository';
+import type { TokenGenerator } from '../../auth/domain/services/token-generator.port';
+import { TOKEN_GENERATOR } from '../../auth/domain/services/token-generator.token';
 
 @Injectable()
 export class VerifyRegistrationOtpUseCase {
@@ -16,36 +17,47 @@ export class VerifyRegistrationOtpUseCase {
     private readonly prisma: PrismaService,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(TOKEN_GENERATOR)
+    private readonly tokenGenerator: TokenGenerator,
   ) {}
 
-  async execute(phone: string, code: string): Promise<User> {
+  async execute(phone: string, code: string): Promise<{ accessToken: string }> {
     const pending = await this.prisma.pendingRegistration.findUnique({
       where: { phone },
     });
-console.log({ phone, pending });
     if (!pending) {
-      throw new BadRequestException('No pending registration found');
+      throw new BadRequestException({
+        code: 'INVALID_OTP',
+        message: 'No pending registration found',
+      });
     }
 
-    if (
-      pending.otpCode !== code ||
-      pending.otpExpiresAt.getTime() <= Date.now()
-    ) {
-      throw new UnauthorizedException('Invalid or expired code');
+    if (pending.otpExpiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException({
+        code: 'EXPIRED_OTP',
+        message: 'Code expired',
+      });
     }
 
-    const existingByEmail = await this.userRepository.findByEmail(
-      pending.email,
-    );
-    if (existingByEmail) {
-      throw new ConflictException('User with this email already exists');
+    if (pending.otpCode !== code) {
+      throw new BadRequestException({
+        code: 'INVALID_OTP',
+        message: 'Invalid code',
+      });
     }
 
-    const existingByPhone = await this.userRepository.findByPhone(
-      pending.phone,
-    );
-    if (existingByPhone) {
-      throw new ConflictException('User with this phone already exists');
+    if (await this.userRepository.findByEmail(pending.email)) {
+      throw new ConflictException({
+        code: 'DUPLICATE_EMAIL',
+        message: 'User with this email already exists',
+      });
+    }
+
+    if (await this.userRepository.findByPhone(pending.phone)) {
+      throw new ConflictException({
+        code: 'DUPLICATE_PHONE',
+        message: 'User with this phone already exists',
+      });
     }
 
     const user = User.create(
@@ -58,6 +70,11 @@ console.log({ phone, pending });
     await this.userRepository.save(user);
     await this.prisma.pendingRegistration.delete({ where: { id: pending.id } });
 
-    return user;
+    const accessToken = this.tokenGenerator.generate({
+      userId: user.id,
+      role: user.role,
+    });
+
+    return { accessToken };
   }
 }

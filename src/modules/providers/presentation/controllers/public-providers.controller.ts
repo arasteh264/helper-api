@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   NotFoundException,
@@ -7,6 +8,58 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
+
+const publicProviderListInclude = {
+  user: { select: { name: true } },
+  skills: { include: { skill: true } },
+  specialties: { include: { specialty: { include: { group: true } } } },
+  portfolioItems: {
+    include: { images: { orderBy: { order: 'asc' } } },
+    orderBy: { order: 'asc' },
+  },
+  _count: {
+    select: {
+      acceptedServiceRequests: { where: { status: 'COMPLETED' } },
+      reviews: true,
+    },
+  },
+} as const;
+
+const publicProviderDetailInclude = {
+  ...publicProviderListInclude,
+  workingHours: true,
+  reviews: {
+    include: {
+      customer: { select: { name: true } },
+      serviceRequest: {
+        select: { specialty: { select: { name: true } } },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  },
+} as const;
+
+const findPublicProviders = (
+  prisma: PrismaService,
+  pagination?: { skip: number; take: number },
+) =>
+  prisma.providerProfile.findMany({
+    where: { verificationStatus: 'APPROVED' },
+    include: publicProviderListInclude,
+    orderBy: [{ isAvailable: 'desc' }, { rating: 'desc' }],
+    ...(pagination ?? {}),
+  });
+
+const findPublicProvider = (prisma: PrismaService, providerProfileId: string) =>
+  prisma.providerProfile.findFirst({
+    where: { id: providerProfileId, verificationStatus: 'APPROVED' },
+    include: publicProviderDetailInclude,
+  });
+
+type PublicProvider =
+  | Awaited<ReturnType<typeof findPublicProviders>>[number]
+  | NonNullable<Awaited<ReturnType<typeof findPublicProvider>>>;
 
 @ApiTags('Public Providers')
 @Controller('public/providers')
@@ -18,7 +71,23 @@ export class PublicProvidersController {
   async list(
     @Query('latitude') latitudeText?: string,
     @Query('longitude') longitudeText?: string,
+    @Query('page') pageText?: string,
+    @Query('pageSize') pageSizeText?: string,
   ) {
+    const isPaginated = pageText !== undefined || pageSizeText !== undefined;
+    const page = pageText === undefined ? 1 : Number(pageText);
+    const pageSize = pageSizeText === undefined ? 24 : Number(pageSizeText);
+    if (
+      isPaginated &&
+      (!Number.isInteger(page) ||
+        page < 1 ||
+        !Number.isInteger(pageSize) ||
+        pageSize < 1 ||
+        pageSize > 100)
+    ) {
+      throw new BadRequestException('شماره یا اندازه صفحه معتبر نیست');
+    }
+
     const latitude = latitudeText === undefined ? null : Number(latitudeText);
     const longitude =
       longitudeText === undefined ? null : Number(longitudeText);
@@ -31,19 +100,24 @@ export class PublicProvidersController {
       latitude <= 90 &&
       longitude >= -180 &&
       longitude <= 180;
-    const providers = await this.prisma.providerProfile.findMany({
-      where: { verificationStatus: 'APPROVED' },
-      include: {
-        user: { select: { name: true } },
-        skills: { include: { skill: true } },
-        specialties: { include: { specialty: { include: { group: true } } } },
-        portfolioItems: {
-          include: { images: { orderBy: { order: 'asc' } } },
-          orderBy: { order: 'asc' },
-        },
-      },
-      orderBy: [{ isAvailable: 'desc' }, { rating: 'desc' }],
-    });
+    if (isPaginated && hasValidLocation) {
+      throw new BadRequestException(
+        'صفحه‌بندی و مرتب‌سازی بر اساس موقعیت را نمی‌توان هم‌زمان استفاده کرد',
+      );
+    }
+    const [providers, total] = await Promise.all([
+      findPublicProviders(
+        this.prisma,
+        isPaginated
+          ? { skip: (page - 1) * pageSize, take: pageSize }
+          : undefined,
+      ),
+      isPaginated
+        ? this.prisma.providerProfile.count({
+            where: { verificationStatus: 'APPROVED' },
+          })
+        : Promise.resolve(0),
+    ]);
     const results = providers.map((provider) => {
       const distanceKm =
         hasValidLocation &&
@@ -66,46 +140,36 @@ export class PublicProvidersController {
         return left.distanceKm - right.distanceKm || right.rating - left.rating;
       });
     }
-    return results;
+    return isPaginated ? { items: results, total, page, pageSize } : results;
   }
 
   @ApiOperation({ summary: 'Get an approved provider profile' })
   @Get(':providerProfileId')
   async getOne(@Param('providerProfileId') providerProfileId: string) {
-    const provider = await this.prisma.providerProfile.findFirst({
-      where: { id: providerProfileId, verificationStatus: 'APPROVED' },
-      include: {
-        user: { select: { name: true } },
-        skills: { include: { skill: true } },
-        specialties: { include: { specialty: { include: { group: true } } } },
-        workingHours: true,
-        portfolioItems: {
-          include: { images: { orderBy: { order: 'asc' } } },
-          orderBy: { order: 'asc' },
-        },
-      },
-    });
+    const provider = await findPublicProvider(this.prisma, providerProfileId);
     if (!provider) throw new NotFoundException('متخصص پیدا نشد');
     return this.toPublicProfile(provider);
   }
 
-  private toPublicProfile(provider: any) {
+  private toPublicProfile(provider: PublicProvider) {
     return {
       id: provider.id,
       name: provider.user.name,
       bio: provider.bio,
       rating: provider.rating,
+      reviewsCount: provider._count?.reviews ?? 0,
+      completedJobs: provider._count?.acceptedServiceRequests ?? 0,
       verified: provider.isVerified,
       available: provider.isAvailable,
       avatarUrl: provider.avatarUrl,
       hasServiceArea:
         provider.serviceAreaLatitude !== null &&
         provider.serviceAreaLongitude !== null,
-      skills: provider.skills.map((item: any) => ({
+      skills: provider.skills.map((item) => ({
         id: item.skill.id,
         name: item.skill.name,
       })),
-      specialties: (provider.specialties ?? []).map((item: any) => ({
+      specialties: (provider.specialties ?? []).map((item) => ({
         id: item.specialty.id,
         name: item.specialty.name,
         slug: item.specialty.slug,
@@ -113,10 +177,21 @@ export class PublicProvidersController {
         groupId: item.specialty.groupId,
         groupName: item.specialty.group.name,
       })),
-      workingHours: provider.workingHours ?? [],
-      portfolio: (provider.portfolioItems ?? []).flatMap((item: any) =>
-        item.images.map((image: any) => image.url),
+      workingHours: 'workingHours' in provider ? provider.workingHours : [],
+      portfolio: (provider.portfolioItems ?? []).flatMap((item) =>
+        item.images.map((image) => image.url),
       ),
+      reviews:
+        'reviews' in provider
+          ? provider.reviews.map((review) => ({
+              id: review.id,
+              customerName: review.customer.name,
+              rating: review.rating,
+              text: review.text ?? '',
+              date: review.createdAt,
+              service: review.serviceRequest.specialty?.name ?? 'خدمات عمومی',
+            }))
+          : [],
       createdAt: provider.createdAt,
     };
   }

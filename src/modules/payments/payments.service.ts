@@ -6,6 +6,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -27,13 +29,133 @@ type CheckoutReservation =
   | { existingAuthority: string; requestId: string };
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PaymentsService.name);
+  private readonly verificationCooldownMs = 15_000;
+  private autoConfirmationTimer?: NodeJS.Timeout;
+  private pendingVerificationSweepRunning = false;
 
   constructor(
     @Inject(PRISMA_SERVICE) private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  onModuleInit() {
+    this.scheduleExpiredCustomerConfirmationSweep();
+    this.schedulePendingGatewayVerificationSweep();
+    this.autoConfirmationTimer = setInterval(() => {
+      this.scheduleExpiredCustomerConfirmationSweep();
+      this.schedulePendingGatewayVerificationSweep();
+    }, 60_000);
+    this.autoConfirmationTimer.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.autoConfirmationTimer) clearInterval(this.autoConfirmationTimer);
+  }
+
+  async processExpiredCustomerConfirmations() {
+    const expired = await this.prisma.serviceRequest.findMany({
+      where: {
+        status: 'AWAITING_CUSTOMER_CONFIRMATION',
+        customerConfirmationDeadline: { lte: new Date() },
+        payments: { some: { status: 'PAID' } },
+      },
+      select: { id: true, customerId: true },
+      take: 100,
+      orderBy: { customerConfirmationDeadline: 'asc' },
+    });
+
+    for (const request of expired) {
+      try {
+        await this.confirmCompletion(request.customerId, request.id, true);
+      } catch (error) {
+        this.logger.error(
+          `Automatic completion failed for request ${request.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+  }
+
+  private scheduleExpiredCustomerConfirmationSweep() {
+    void this.processExpiredCustomerConfirmations().catch((error: unknown) => {
+      this.logger.error(
+        'Expired customer confirmation sweep failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
+  private schedulePendingGatewayVerificationSweep() {
+    void this.processPendingGatewayVerifications().catch((error: unknown) => {
+      this.logger.error(
+        'Pending gateway verification sweep failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
+  async processPendingGatewayVerifications() {
+    if (this.pendingVerificationSweepRunning) return;
+    this.pendingVerificationSweepRunning = true;
+    const retryBefore = new Date(Date.now() - this.verificationCooldownMs);
+    const olderThan = new Date(Date.now() - 60_000);
+    try {
+      const [payments, topups] = await Promise.all([
+        this.prisma.payment.findMany({
+          where: {
+            gateway: 'ZARINPAL',
+            status: 'PENDING',
+            authority: { not: null },
+            createdAt: { lte: olderThan },
+            OR: [
+              { lastVerificationAttemptAt: null },
+              { lastVerificationAttemptAt: { lt: retryBefore } },
+            ],
+          },
+          select: { authority: true },
+          orderBy: { createdAt: 'asc' },
+          take: 20,
+        }),
+        this.prisma.customerWalletTopup.findMany({
+          where: {
+            gateway: 'ZARINPAL',
+            status: 'PENDING',
+            authority: { not: null },
+            createdAt: { lte: olderThan },
+            OR: [
+              { lastVerificationAttemptAt: null },
+              { lastVerificationAttemptAt: { lt: retryBefore } },
+            ],
+          },
+          select: { authority: true },
+          orderBy: { createdAt: 'asc' },
+          take: 20,
+        }),
+      ]);
+
+      const authorities = [...payments, ...topups]
+        .map(({ authority }) => authority)
+        .filter((authority): authority is string => authority !== null);
+      for (let index = 0; index < authorities.length; index += 5) {
+        await Promise.all(
+          authorities.slice(index, index + 5).map(async (authority) => {
+            try {
+              await this.handleCallback(authority, undefined);
+            } catch (error) {
+              this.logger.error(
+                'Pending gateway verification failed',
+                error instanceof Error ? error.stack : String(error),
+              );
+            }
+          }),
+        );
+      }
+    } finally {
+      this.pendingVerificationSweepRunning = false;
+    }
+  }
 
   async getCustomerWallet(userId: string) {
     const profile = await this.prisma.customerProfile.upsert({
@@ -48,34 +170,53 @@ export class PaymentsService {
       create: { customerProfileId: profile.id },
       select: { id: true, balance: true, totalSpent: true },
     });
-    const topups = await this.prisma.customerWalletTopup.findMany({
-      where: { customerWalletId: wallet.id },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 50,
-      select: {
-        id: true,
-        amountToman: true,
-        status: true,
-        referenceId: true,
-        failureReason: true,
-        createdAt: true,
-        paidAt: true,
-      },
-    });
+    const [topups, walletPayments] = await Promise.all([
+      this.prisma.customerWalletTopup.findMany({
+        where: { customerWalletId: wallet.id },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 50,
+        select: {
+          id: true,
+          amountToman: true,
+          gateway: true,
+          status: true,
+          referenceId: true,
+          failureReason: true,
+          createdAt: true,
+          paidAt: true,
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          gateway: 'WALLET',
+          serviceRequest: { customerId: userId },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 50,
+        select: {
+          id: true,
+          amountToman: true,
+          createdAt: true,
+          paidAt: true,
+          serviceRequest: { select: { title: true } },
+        },
+      }),
+    ]);
 
-    return {
-      balance: wallet.balance,
-      totalSpent: wallet.totalSpent,
-      transactions: topups.map((topup) => ({
+    const transactions = [
+      ...topups.map((topup) => ({
         id: topup.id,
-        type: 'topup' as const,
+        type:
+          topup.gateway === 'WALLET' ? ('refund' as const) : ('topup' as const),
         date: topup.createdAt,
         description:
-          topup.status === 'PAID'
-            ? `شارژ کیف پول${topup.referenceId ? ` · کد پیگیری ${topup.referenceId}` : ''}`
-            : topup.status === 'FAILED'
-              ? 'شارژ ناموفق کیف پول'
-              : 'شارژ کیف پول در انتظار پرداخت',
+          topup.gateway === 'WALLET'
+            ? 'بازگشت وجه اختلاف به کیف پول'
+            : topup.status === 'PAID'
+              ? `شارژ کیف پول${topup.referenceId ? ` · کد پیگیری ${topup.referenceId}` : ''}`
+              : topup.status === 'FAILED'
+                ? 'شارژ ناموفق کیف پول'
+                : 'شارژ کیف پول در انتظار پرداخت',
         amount: topup.amountToman,
         status:
           topup.status === 'PAID'
@@ -87,6 +228,22 @@ export class PaymentsService {
         failureReason: topup.failureReason,
         paidAt: topup.paidAt,
       })),
+      ...walletPayments.map((payment) => ({
+        id: payment.id,
+        type: 'payment' as const,
+        date: payment.paidAt ?? payment.createdAt,
+        description: `پرداخت درخواست «${payment.serviceRequest.title}» از کیف پول`,
+        amount: -payment.amountToman,
+        status: 'completed' as const,
+      })),
+    ]
+      .sort((left, right) => right.date.getTime() - left.date.getTime())
+      .slice(0, 50);
+
+    return {
+      balance: wallet.balance,
+      totalSpent: wallet.totalSpent,
+      transactions,
     };
   }
 
@@ -270,10 +427,168 @@ export class PaymentsService {
     }
   }
 
+  async payFromWallet(userId: string, requestId: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${requestId} FOR UPDATE`;
+
+      const request = await tx.serviceRequest.findFirst({
+        where: { id: requestId, customerId: userId },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          providerPriceToman: true,
+          acceptedProviderProfile: { select: { userId: true } },
+          payments: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { status: true },
+          },
+        },
+      });
+      if (!request) throw new NotFoundException('درخواست پیدا نشد');
+      if (request.status !== 'CUSTOMER_CONFIRMATION_PENDING') {
+        throw new ConflictException('این درخواست هنوز آماده‌ی پرداخت نیست');
+      }
+      if (!request.providerPriceToman || request.providerPriceToman <= 0) {
+        throw new ConflictException('قیمت نهایی provider ثبت نشده است');
+      }
+
+      const latestPayment = request.payments[0];
+      if (latestPayment?.status === 'PAID') {
+        throw new ConflictException('این درخواست قبلاً پرداخت شده است');
+      }
+      if (latestPayment?.status === 'PENDING') {
+        throw new ConflictException(
+          'یک پرداخت دیگر برای این درخواست در حال انجام است',
+        );
+      }
+
+      const profile = await tx.customerProfile.upsert({
+        where: { userId },
+        update: {},
+        create: { userId },
+        select: { id: true },
+      });
+      const wallet = await tx.customerWallet.upsert({
+        where: { customerProfileId: profile.id },
+        update: {},
+        create: { customerProfileId: profile.id },
+        select: { id: true },
+      });
+
+      await tx.$queryRaw`SELECT "id" FROM "CustomerWallet" WHERE "id" = ${wallet.id} FOR UPDATE`;
+      const currentWallet = await tx.customerWallet.findUnique({
+        where: { id: wallet.id },
+        select: { balance: true },
+      });
+      const balanceToman = currentWallet?.balance ?? 0;
+      if (balanceToman < request.providerPriceToman) {
+        throw new BadRequestException({
+          code: 'INSUFFICIENT_WALLET_BALANCE',
+          message: 'موجودی کیف پول برای پرداخت کافی نیست',
+          balanceToman,
+          requiredAmountToman: request.providerPriceToman,
+        });
+      }
+
+      const updatedWallet = await tx.customerWallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: { decrement: request.providerPriceToman },
+          totalSpent: { increment: request.providerPriceToman },
+        },
+        select: { balance: true },
+      });
+      await tx.payment.create({
+        data: {
+          serviceRequestId: request.id,
+          amountToman: request.providerPriceToman,
+          gateway: 'WALLET',
+          status: 'PAID',
+          paidAt: new Date(),
+        },
+      });
+
+      const updatedRequest = await tx.serviceRequest.updateMany({
+        where: {
+          id: request.id,
+          customerId: userId,
+          status: 'CUSTOMER_CONFIRMATION_PENDING',
+        },
+        data: { status: 'OFFER_ACCEPTED' },
+      });
+      if (!updatedRequest.count) {
+        throw new ConflictException('وضعیت درخواست برای پرداخت معتبر نیست');
+      }
+
+      return {
+        requestId: request.id,
+        title: request.title,
+        customerId: userId,
+        providerUserId: request.acceptedProviderProfile?.userId,
+        amountToman: request.providerPriceToman,
+        balanceToman: updatedWallet.balance,
+      };
+    });
+
+    await Promise.all([
+      this.notifications.createForUser({
+        userId: result.customerId,
+        category: 'PAYMENTS',
+        type: 'PAYMENT_UPDATE',
+        title: 'پرداخت موفق',
+        body: `مبلغ ${result.amountToman.toLocaleString('fa-IR')} تومان بابت درخواست «${result.title}» از کیف پول پرداخت شد.`,
+        serviceRequestId: result.requestId,
+      }),
+      this.notifications.createForUser({
+        userId: result.customerId,
+        category: 'WORK_UPDATES',
+        type: 'SERVICE_REQUEST_STATUS',
+        title: 'پیشنهاد تأیید و پرداخت شد',
+        body: `درخواست «${result.title}» آماده شروع کار است.`,
+        serviceRequestId: result.requestId,
+      }),
+      ...(result.providerUserId
+        ? [
+            this.notifications.createForUser({
+              userId: result.providerUserId,
+              category: 'PAYMENTS',
+              type: 'PAYMENT_UPDATE',
+              title: 'پرداخت مشتری انجام شد',
+              body: `پرداخت درخواست «${result.title}» انجام شد.`,
+              serviceRequestId: result.requestId,
+            }),
+            this.notifications.createForUser({
+              userId: result.providerUserId,
+              category: 'WORK_UPDATES',
+              type: 'SERVICE_REQUEST_STATUS',
+              title: 'درخواست آماده شروع است',
+              body: `پرداخت درخواست «${result.title}» تأیید شد.`,
+              serviceRequestId: result.requestId,
+            }),
+          ]
+        : []),
+    ]).catch((error: unknown) => {
+      this.logger.error(
+        'Wallet payment notification could not be created',
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+
+    return {
+      status: 'PAID' as const,
+      requestId: result.requestId,
+      amountToman: result.amountToman,
+      walletBalanceToman: result.balanceToman,
+    };
+  }
+
   async handleCallback(
     authority: string | undefined,
-    status: string | undefined,
+    _status: string | undefined,
   ) {
+    void _status;
     const config = this.getConfig();
     if (!authority) return this.getReturnUrl(config.returnUrl, 'failed');
 
@@ -294,7 +609,7 @@ export class PaymentsService {
       },
     });
     if (!payment) {
-      return this.handleCustomerWalletTopupCallback(authority, status, config);
+      return this.handleCustomerWalletTopupCallback(authority, config);
     }
     if (payment.status === 'PAID') {
       return this.getReturnUrl(
@@ -303,11 +618,34 @@ export class PaymentsService {
         payment.serviceRequestId,
       );
     }
-    if (payment.status !== 'PENDING' || status?.toUpperCase() !== 'OK') {
-      await this.markFailed(payment.id, 'پرداخت توسط کاربر لغو شد');
+    if (payment.status !== 'PENDING') {
       return this.getReturnUrl(
         config.returnUrl,
-        'failed',
+        payment.status === 'FAILED' ? 'failed' : 'pending',
+        payment.serviceRequestId,
+      );
+    }
+
+    const retryBefore = new Date(Date.now() - this.verificationCooldownMs);
+    const claimed = await this.prisma.payment.updateMany({
+      where: {
+        id: payment.id,
+        status: 'PENDING',
+        OR: [
+          { lastVerificationAttemptAt: null },
+          { lastVerificationAttemptAt: { lt: retryBefore } },
+        ],
+      },
+      data: { lastVerificationAttemptAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      const current = await this.prisma.payment.findUnique({
+        where: { id: payment.id },
+        select: { status: true },
+      });
+      return this.getReturnUrl(
+        config.returnUrl,
+        current?.status === 'PAID' ? 'success' : 'pending',
         payment.serviceRequestId,
       );
     }
@@ -425,7 +763,6 @@ export class PaymentsService {
 
   private async handleCustomerWalletTopupCallback(
     authority: string,
-    status: string | undefined,
     config: ReturnType<PaymentsService['getConfig']>,
   ) {
     const topup = await this.prisma.customerWalletTopup.findUnique({
@@ -440,12 +777,34 @@ export class PaymentsService {
     if (topup.status === 'PAID') {
       return this.getWalletReturnUrl(config.returnUrl, 'success');
     }
-    if (topup.status !== 'PENDING' || status?.toUpperCase() !== 'OK') {
-      await this.markCustomerWalletTopupFailed(
-        topup.id,
-        'پرداخت توسط کاربر لغو شد',
+    if (topup.status !== 'PENDING') {
+      return this.getWalletReturnUrl(
+        config.returnUrl,
+        topup.status === 'FAILED' ? 'failed' : 'pending',
       );
-      return this.getWalletReturnUrl(config.returnUrl, 'failed');
+    }
+
+    const retryBefore = new Date(Date.now() - this.verificationCooldownMs);
+    const claimed = await this.prisma.customerWalletTopup.updateMany({
+      where: {
+        id: topup.id,
+        status: 'PENDING',
+        OR: [
+          { lastVerificationAttemptAt: null },
+          { lastVerificationAttemptAt: { lt: retryBefore } },
+        ],
+      },
+      data: { lastVerificationAttemptAt: new Date() },
+    });
+    if (!claimed.count) {
+      const current = await this.prisma.customerWalletTopup.findUnique({
+        where: { id: topup.id },
+        select: { status: true },
+      });
+      return this.getWalletReturnUrl(
+        config.returnUrl,
+        current?.status === 'PAID' ? 'success' : 'pending',
+      );
     }
 
     let reply: ZarinpalReply;
@@ -540,6 +899,34 @@ export class PaymentsService {
     return payment;
   }
 
+  async verifyCustomerPayment(userId: string, requestId: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        serviceRequestId: requestId,
+        serviceRequest: { customerId: userId },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        authority: true,
+        gateway: true,
+        status: true,
+      },
+    });
+    if (!payment) {
+      throw new NotFoundException('پرداختی برای این درخواست پیدا نشد');
+    }
+
+    if (
+      payment.status === 'PENDING' &&
+      payment.gateway === 'ZARINPAL' &&
+      payment.authority
+    ) {
+      await this.handleCallback(payment.authority, undefined);
+    }
+
+    return this.getCustomerPayment(userId, requestId);
+  }
+
   async listMyPayments(userId: string, page: number, pageSize: number) {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
@@ -584,18 +971,32 @@ export class PaymentsService {
     };
   }
 
-  async confirmCompletion(userId: string, requestId: string) {
+  async confirmCompletion(
+    userId: string,
+    requestId: string,
+    autoConfirmed = false,
+    expectedStatus:
+      | 'AWAITING_CUSTOMER_CONFIRMATION'
+      | 'DISPUTED' = 'AWAITING_CUSTOMER_CONFIRMATION',
+    adminResolution?: {
+      resolution: 'PROVIDER' | 'BUYER';
+      adminUserId: string;
+      reason: string;
+    },
+  ) {
+    const adminResolvedDispute = expectedStatus === 'DISPUTED';
     const completion = await this.prisma.$transaction(async (tx) => {
       const request = await tx.serviceRequest.findFirst({
         where: {
           id: requestId,
           customerId: userId,
-          status: 'AWAITING_CUSTOMER_CONFIRMATION',
+          status: expectedStatus,
           payments: { some: { status: 'PAID' } },
         },
         select: {
           id: true,
           title: true,
+          customerId: true,
           acceptedProviderProfileId: true,
           providerPriceToman: true,
           acceptedProviderProfile: { select: { userId: true } },
@@ -614,10 +1015,21 @@ export class PaymentsService {
         where: {
           id: request.id,
           customerId: userId,
-          status: 'AWAITING_CUSTOMER_CONFIRMATION',
+          status: expectedStatus,
           payments: { some: { status: 'PAID' } },
         },
-        data: { status: 'COMPLETED' },
+        data: {
+          status: 'COMPLETED',
+          customerConfirmationDeadline: null,
+          ...(adminResolution
+            ? {
+                disputeResolution: adminResolution.resolution,
+                disputeResolutionNote: adminResolution.reason,
+                disputeResolvedById: adminResolution.adminUserId,
+                disputeResolvedAt: new Date(),
+              }
+            : {}),
+        },
       });
       if (!completed.count) {
         throw new ConflictException('وضعیت این کار تغییر کرده است');
@@ -672,27 +1084,64 @@ export class PaymentsService {
       }
 
       return {
-        message: 'اتمام کار تأیید و درآمد provider تسویه شد',
+        message: autoConfirmed
+          ? 'به دلیل ثبت‌نشدن پاسخ در مهلت مقرر، کار تکمیل و درآمد provider تسویه شد'
+          : adminResolvedDispute
+            ? 'اختلاف به نفع provider تعیین‌تکلیف و درآمد تسویه شد'
+            : 'اتمام کار تأیید و درآمد provider تسویه شد',
         releasedAmountToman: request.providerPriceToman - commission,
         providerUserId: request.acceptedProviderProfile.userId,
+        customerId: request.customerId,
         requestTitle: request.title,
       };
     });
-    await this.notifications.createForUser({
-      userId: completion.providerUserId,
-      category: 'WORK_UPDATES',
-      type: 'SERVICE_REQUEST_STATUS',
-      title: 'پایان کار تأیید شد',
-      body: `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
-      serviceRequestId: requestId,
-    });
-    await this.notifications.createForUser({
-      userId: completion.providerUserId,
-      category: 'PAYMENTS',
-      type: 'PAYMENT_UPDATE',
-      title: 'درآمد به کیف پول اضافه شد',
-      body: `مبلغ ${completion.releasedAmountToman.toLocaleString('fa-IR')} تومان بابت درخواست «${completion.requestTitle}» به کیف پول شما اضافه شد.`,
-      serviceRequestId: requestId,
+    const completionNotifications = [
+      this.notifications.createForUser({
+        userId: completion.providerUserId,
+        category: 'WORK_UPDATES' as const,
+        type: 'SERVICE_REQUEST_STATUS' as const,
+        title: autoConfirmed
+          ? 'درخواست به‌طور خودکار تکمیل شد'
+          : adminResolvedDispute
+            ? 'اختلاف به نفع شما تعیین‌تکلیف شد'
+            : 'پایان کار تأیید شد',
+        body: autoConfirmed
+          ? `مهلت پاسخ مشتری برای درخواست «${completion.requestTitle}» به پایان رسید و درآمد آزاد شد.`
+          : adminResolvedDispute
+            ? `پس از بررسی اختلاف درخواست «${completion.requestTitle}»، درآمد برای شما آزاد شد.`
+            : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
+        serviceRequestId: requestId,
+      }),
+      this.notifications.createForUser({
+        userId: completion.providerUserId,
+        category: 'PAYMENTS' as const,
+        type: 'PAYMENT_UPDATE' as const,
+        title: 'درآمد به کیف پول اضافه شد',
+        body: `مبلغ ${completion.releasedAmountToman.toLocaleString('fa-IR')} تومان بابت درخواست «${completion.requestTitle}» به کیف پول شما اضافه شد.`,
+        serviceRequestId: requestId,
+      }),
+      ...(autoConfirmed || adminResolvedDispute
+        ? [
+            this.notifications.createForUser({
+              userId: completion.customerId,
+              category: 'WORK_UPDATES' as const,
+              type: 'SERVICE_REQUEST_STATUS' as const,
+              title: autoConfirmed
+                ? 'درخواست به‌طور خودکار تکمیل شد'
+                : 'اختلاف به نفع متخصص تعیین‌تکلیف شد',
+              body: autoConfirmed
+                ? `مهلت ۷۲ ساعته‌ی بررسی درخواست «${completion.requestTitle}» به پایان رسید؛ اگر مشکلی وجود دارد با پشتیبانی تماس بگیرید.`
+                : `پس از بررسی اختلاف درخواست «${completion.requestTitle}»، مبلغ به متخصص پرداخت شد.`,
+              serviceRequestId: requestId,
+            }),
+          ]
+        : []),
+    ];
+    await Promise.all(completionNotifications).catch((error: unknown) => {
+      this.logger.error(
+        `Completion notification failed for request ${requestId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     });
     return {
       message: completion.message,
@@ -701,11 +1150,13 @@ export class PaymentsService {
   }
 
   async raiseDispute(userId: string, requestId: string) {
+    const now = new Date();
     const request = await this.prisma.serviceRequest.findFirst({
       where: {
         id: requestId,
         customerId: userId,
         status: 'AWAITING_CUSTOMER_CONFIRMATION',
+        customerConfirmationDeadline: { gt: now },
         payments: { some: { status: 'PAID' } },
       },
       select: {
@@ -718,9 +1169,13 @@ export class PaymentsService {
         id: requestId,
         customerId: userId,
         status: 'AWAITING_CUSTOMER_CONFIRMATION',
+        customerConfirmationDeadline: { gt: now },
         payments: { some: { status: 'PAID' } },
       },
-      data: { status: 'DISPUTED' },
+      data: {
+        status: 'DISPUTED',
+        customerConfirmationDeadline: null,
+      },
     });
     if (!result.count) {
       throw new ConflictException('این درخواست آماده‌ی ثبت اختلاف نیست');
@@ -736,6 +1191,161 @@ export class PaymentsService {
       });
     }
     return { message: 'درخواست برای بررسی اختلاف ثبت شد' };
+  }
+
+  async resolveDisputedRequestByAdmin(
+    requestId: string,
+    resolution: 'PROVIDER' | 'BUYER',
+    adminUserId: string,
+    reason: string,
+  ) {
+    const normalizedReason = reason.trim();
+    if (normalizedReason.length < 3 || normalizedReason.length > 1000) {
+      throw new BadRequestException('برای حل اختلاف، دلیل معتبر الزامی است');
+    }
+
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        status: 'DISPUTED',
+        payments: { some: { status: 'PAID' } },
+      },
+      select: { id: true, customerId: true },
+    });
+    if (!request) throw new NotFoundException('اختلاف فعال پیدا نشد');
+
+    if (resolution === 'PROVIDER') {
+      return this.confirmCompletion(
+        request.customerId,
+        request.id,
+        false,
+        'DISPUTED',
+        { resolution, adminUserId, reason: normalizedReason },
+      );
+    }
+
+    const refund = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${request.id} FOR UPDATE`;
+      const disputedRequest = await tx.serviceRequest.findFirst({
+        where: {
+          id: request.id,
+          customerId: request.customerId,
+          status: 'DISPUTED',
+          payments: { some: { status: 'PAID' } },
+        },
+        select: {
+          id: true,
+          title: true,
+          customerId: true,
+          payments: {
+            where: { status: 'PAID' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, amountToman: true },
+          },
+          acceptedProviderProfile: { select: { userId: true } },
+        },
+      });
+      const payment = disputedRequest?.payments[0];
+      if (!disputedRequest || !payment) {
+        throw new ConflictException('وضعیت اختلاف تغییر کرده است');
+      }
+
+      const paid = await tx.payment.updateMany({
+        where: { id: payment.id, status: 'PAID' },
+        data: { status: 'REFUNDED' },
+      });
+      if (!paid.count)
+        throw new ConflictException('پرداخت قبلاً تعیین‌تکلیف شده است');
+
+      const cancelled = await tx.serviceRequest.updateMany({
+        where: { id: disputedRequest.id, status: 'DISPUTED' },
+        data: {
+          status: 'CANCELLED',
+          customerConfirmationDeadline: null,
+          disputeResolution: resolution,
+          disputeResolutionNote: normalizedReason,
+          disputeResolvedById: adminUserId,
+          disputeResolvedAt: new Date(),
+        },
+      });
+      if (!cancelled.count)
+        throw new ConflictException('وضعیت درخواست تغییر کرده است');
+
+      const profile = await tx.customerProfile.upsert({
+        where: { userId: disputedRequest.customerId },
+        update: {},
+        create: { userId: disputedRequest.customerId },
+        select: { id: true },
+      });
+      const wallet = await tx.customerWallet.upsert({
+        where: { customerProfileId: profile.id },
+        update: {},
+        create: { customerProfileId: profile.id },
+        select: { id: true },
+      });
+      await tx.$queryRaw`SELECT "id" FROM "CustomerWallet" WHERE "id" = ${wallet.id} FOR UPDATE`;
+      const currentWallet = await tx.customerWallet.findUniqueOrThrow({
+        where: { id: wallet.id },
+        select: { balance: true, totalSpent: true },
+      });
+      await tx.customerWallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: { increment: payment.amountToman },
+          totalSpent: {
+            decrement: Math.min(currentWallet.totalSpent, payment.amountToman),
+          },
+        },
+      });
+      await tx.customerWalletTopup.create({
+        data: {
+          customerWalletId: wallet.id,
+          amountToman: payment.amountToman,
+          gateway: 'WALLET',
+          status: 'PAID',
+          referenceId: `DISPUTE-${disputedRequest.id}`,
+          paidAt: new Date(),
+        },
+      });
+
+      return {
+        requestId: disputedRequest.id,
+        title: disputedRequest.title,
+        customerId: disputedRequest.customerId,
+        providerUserId: disputedRequest.acceptedProviderProfile?.userId,
+        amountToman: payment.amountToman,
+      };
+    });
+
+    await Promise.allSettled([
+      this.notifications.createForUser({
+        userId: refund.customerId,
+        category: 'PAYMENTS',
+        type: 'PAYMENT_UPDATE',
+        title: 'مبلغ اختلاف به کیف پول برگشت',
+        body: `مبلغ ${refund.amountToman.toLocaleString('fa-IR')} تومان بابت درخواست «${refund.title}» به کیف پول شما اضافه شد.`,
+        serviceRequestId: refund.requestId,
+      }),
+      ...(refund.providerUserId
+        ? [
+            this.notifications.createForUser({
+              userId: refund.providerUserId,
+              category: 'WORK_UPDATES',
+              type: 'SERVICE_REQUEST_STATUS',
+              title: 'اختلاف به نفع خریدار تعیین‌تکلیف شد',
+              body: `درخواست «${refund.title}» لغو و مبلغ به کیف پول خریدار بازگردانده شد.`,
+              serviceRequestId: refund.requestId,
+            }),
+          ]
+        : []),
+    ]);
+
+    return {
+      resolution: 'BUYER' as const,
+      requestId: refund.requestId,
+      refundedAmountToman: refund.amountToman,
+    };
   }
 
   async listPayments(page: number, pageSize: number, status?: string) {

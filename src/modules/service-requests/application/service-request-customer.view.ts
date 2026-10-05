@@ -14,14 +14,23 @@ export type CustomerViewSource = {
   providerHourlyUnitLabel?: string | null;
   providerEstimatedHours?: number | null;
   scheduledAt: Date | null;
+  customerConfirmationDeadline?: Date | null;
   createdAt: Date;
   skills: { skill: { name: string } }[];
   specialtyName?: string | null;
   images: { id: string; url: string }[];
   acceptedProviderProfile: {
+    id: string;
     rating: number;
     user: { name: string };
   } | null;
+  review?: {
+    id: string;
+    rating: number;
+    text: string | null;
+    createdAt: Date;
+  } | null;
+  payments?: { id: string }[];
 };
 
 export function toCustomerView(request: CustomerViewSource) {
@@ -51,6 +60,8 @@ export function toCustomerView(request: CustomerViewSource) {
     longitude: request.longitude,
     createdAt: request.createdAt.toISOString(),
     scheduledAt: request.scheduledAt?.toISOString(),
+    customerConfirmationDeadline:
+      request.customerConfirmationDeadline?.toISOString(),
     status,
     offersCount: provider ? 1 : 0,
     budget:
@@ -75,7 +86,7 @@ export function toCustomerView(request: CustomerViewSource) {
           : undefined,
     specialist: provider
       ? {
-          id: request.id,
+          id: provider.id,
           name: provider.user.name,
           field:
             request.specialtyName ??
@@ -84,6 +95,15 @@ export function toCustomerView(request: CustomerViewSource) {
         }
       : undefined,
     images: request.images.map((image) => image.url),
-    reviewed: false,
+    reviewed: Boolean(request.review),
+    review: request.review
+      ? {
+          id: request.review.id,
+          rating: request.review.rating,
+          text: request.review.text,
+          createdAt: request.review.createdAt.toISOString(),
+        }
+      : null,
+    wasPaid: (request.payments?.length ?? 0) > 0,
   };
 }

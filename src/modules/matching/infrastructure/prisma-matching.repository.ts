@@ -40,10 +40,17 @@ export class PrismaMatchingRepository implements MatchingRepository {
     specialtyId: string | null,
     skillIds: string[],
   ): Promise<ProviderCandidate[]> {
+    const request = await this.prisma.serviceRequest.findUnique({
+      where: { id: requestId },
+      select: { customerId: true },
+    });
+    if (!request) return [];
+
     const providers = await this.prisma.providerProfile.findMany({
       where: {
         verificationStatus: 'APPROVED',
         isAvailable: true,
+        userId: { not: request.customerId },
         serviceAreaLatitude: { not: null },
         serviceAreaLongitude: { not: null },
         OR: [

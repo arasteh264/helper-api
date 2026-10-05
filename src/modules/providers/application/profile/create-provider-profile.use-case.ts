@@ -1,15 +1,11 @@
-import {
-  Inject,
-  Injectable,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 
 import * as userRepository from '../../../users/domain/repositories/user.repository';
 import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
 import { USER_REPOSITORY } from '../../../users/domain/repositories/user.repository.token';
 import { ProviderProfile } from '../../domain/entities/provider-profile.entity';
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
+import { UserRole } from '../../../users/domain/entities/user-role.enum';
 @Injectable()
 export class CreateProviderProfileUseCase {
   constructor(
@@ -21,21 +17,23 @@ export class CreateProviderProfileUseCase {
 
   async execute(userId: string, bio: string | null): Promise<ProviderProfile> {
     const existing = await this.providerProfileRepository.findByUserId(userId);
-    console.log(existing);
-
-    if (existing) {
-      throw new ConflictException(
-        'Provider profile already exists for this user',
-      );
-    }
-
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    if (existing) {
+      if (user.role !== UserRole.PROVIDER) {
+        user.setRole(UserRole.PROVIDER);
+        await this.userRepository.update(user);
+      }
+      return existing;
+    }
+
     const profile = ProviderProfile.create(userId, bio);
     await this.providerProfileRepository.save(profile);
+    user.setRole(UserRole.PROVIDER);
+    await this.userRepository.update(user);
 
     return profile;
   }

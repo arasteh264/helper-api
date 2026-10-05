@@ -11,9 +11,10 @@ import { AdminServiceRequestController } from './presentation/controllers/admin-
 import { AdminListServiceRequestsUseCase } from './application/admin-list-service-requests.use-case';
 import { ListMyServiceRequestsUseCase } from '../customers/application/list-my-service-requests.use-case';
 import { MatchingModule } from '../matching/matching.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
-  imports: [ProvidersModule, MatchingModule],
+  imports: [ProvidersModule, MatchingModule, PaymentsModule],
   controllers: [
     PublicServiceCategoriesController,
     ServiceRequestController,

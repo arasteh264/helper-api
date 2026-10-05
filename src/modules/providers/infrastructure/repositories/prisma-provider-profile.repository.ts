@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
-import {
-  ProviderProfile,
-  ProviderWorkingHourSlot,
-} from '../../domain/entities/provider-profile.entity';
+import { ProviderProfile } from '../../domain/entities/provider-profile.entity';
 import type {
   ProviderProfileRepository,
   ProviderProfileDetails,
@@ -216,6 +213,103 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     });
 
     return rows.map((row) => this.toDomain(row));
+  }
+
+  async findPendingDetailsPage(input: {
+    skip: number;
+    take: number;
+    search?: string;
+    isAvailable?: boolean;
+  }): Promise<{ items: ProviderProfileDetails[]; total: number }> {
+    const where = {
+      verificationStatus: 'PENDING' as const,
+      ...(input.isAvailable === undefined
+        ? {}
+        : { isAvailable: input.isAvailable }),
+      ...(input.search
+        ? {
+            user: {
+              is: {
+                OR: [
+                  {
+                    name: {
+                      contains: input.search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                  {
+                    email: {
+                      contains: input.search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                  {
+                    phone: {
+                      contains: input.search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                ],
+              },
+            },
+          }
+        : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.providerProfile.findMany({
+        where,
+        skip: input.skip,
+        take: input.take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          user: { select: { name: true, email: true, phone: true } },
+          skills: { include: { skill: true } },
+          specialties: { include: { specialty: { include: { group: true } } } },
+          workingHours: true,
+        },
+      }),
+      this.prisma.providerProfile.count({ where }),
+    ]);
+
+    return {
+      items: rows.map((profile) => ({
+        id: profile.id,
+        userId: profile.userId,
+        bio: profile.bio,
+        rating: profile.rating,
+        isVerified: profile.isVerified,
+        verificationStatus: profile.verificationStatus,
+        verificationNote: profile.verificationNote,
+        verifiedAt: profile.verifiedAt,
+        isAvailable: profile.isAvailable,
+        avatarUrl: profile.avatarUrl,
+        serviceAreaLatitude: profile.serviceAreaLatitude,
+        serviceAreaLongitude: profile.serviceAreaLongitude,
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt,
+        user: profile.user,
+        skills: profile.skills.map(({ skill }) => ({
+          id: skill.id,
+          name: skill.name,
+        })),
+        specialties: profile.specialties.map(({ specialty }) => ({
+          id: specialty.id,
+          name: specialty.name,
+          slug: specialty.slug,
+          icon: specialty.icon,
+          groupId: specialty.groupId,
+          groupName: specialty.group.name,
+        })),
+        workingHours: profile.workingHours.map((hour) => ({
+          dayOfWeek: hour.dayOfWeek,
+          isActive: hour.isActive,
+          startTime: hour.startTime,
+          endTime: hour.endTime,
+        })),
+      })),
+      total,
+    };
   }
 
   async findAllApprovedDetails(): Promise<ProviderProfileDetails[]> {
