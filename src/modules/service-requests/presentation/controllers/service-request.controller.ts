@@ -1,11 +1,13 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
   NotFoundException,
   Param,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -36,6 +38,8 @@ import { InviteProviderDto } from '../../application/dto/invite-provider.dto';
 import { ListMyServiceRequestsUseCase } from '../../../../modules/customers/application/list-my-service-requests.use-case';
 import { MatchProvidersForRequestUseCase } from '../../../../modules/matching/application/match-providers-for-request.use-case';
 import { Logger } from '@nestjs/common';
+import { CreateServiceRequestReviewDto } from '../../application/dto/create-service-request-review.dto';
+import { MyServiceRequestsQueryDto } from '../../../../modules/customers/application/dto/my-service-requests-query.dto';
 @ApiTags('Service Requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -52,8 +56,15 @@ export class ServiceRequestController {
   ) {}
 
   @Get('mine')
-  getMine(@CurrentUser() currentUser: TokenPayload) {
-    return this.listMyRequests.execute(currentUser.userId);
+  getMine(
+    @CurrentUser() currentUser: TokenPayload,
+    @Query() query: MyServiceRequestsQueryDto,
+  ) {
+    return this.listMyRequests.executePage(currentUser.userId, {
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 20,
+      group: query.group ?? 'active',
+    });
   }
 
   @ApiOperation({
@@ -77,6 +88,7 @@ export class ServiceRequestController {
       where: {
         verificationStatus: 'APPROVED',
         isAvailable: true,
+        userId: { not: currentUser.userId },
         OR: [
           ...(request.specialtyId
             ? [{ specialties: { some: { specialtyId: request.specialtyId } } }]
@@ -152,6 +164,7 @@ export class ServiceRequestController {
         id: dto.providerProfileId,
         verificationStatus: 'APPROVED',
         isAvailable: true,
+        userId: { not: currentUser.userId },
         OR: [
           ...(request.specialtyId
             ? [{ specialties: { some: { specialtyId: request.specialtyId } } }]
@@ -197,6 +210,14 @@ export class ServiceRequestController {
         acceptedProviderProfile: {
           include: { user: { select: { name: true } } },
         },
+        review: {
+          select: { id: true, rating: true, text: true, createdAt: true },
+        },
+        payments: {
+          where: { status: 'PAID' },
+          select: { id: true },
+          take: 1,
+        },
       },
     });
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
@@ -204,6 +225,67 @@ export class ServiceRequestController {
       throw new ForbiddenException('به این درخواست دسترسی ندارید');
     }
     return this.toCustomerView(request);
+  }
+
+  @ApiOperation({ summary: 'Review a completed service request' })
+  @Post(':id/review')
+  async reviewCompletedRequest(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateServiceRequestReviewDto,
+  ) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id,
+        customerId: currentUser.userId,
+        status: 'COMPLETED',
+      },
+      select: {
+        id: true,
+        acceptedProviderProfileId: true,
+        review: { select: { id: true } },
+      },
+    });
+    if (!request?.acceptedProviderProfileId) {
+      throw new NotFoundException('درخواست تکمیل‌شده برای ثبت نظر پیدا نشد');
+    }
+    if (request.review) {
+      throw new ConflictException('برای این درخواست قبلاً نظر ثبت شده است');
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const review = await tx.serviceRequestReview.create({
+          data: {
+            serviceRequestId: request.id,
+            customerId: currentUser.userId,
+            providerProfileId: request.acceptedProviderProfileId!,
+            rating: dto.rating,
+            text: dto.text?.trim() || null,
+          },
+          select: { id: true, rating: true, text: true, createdAt: true },
+        });
+        const aggregate = await tx.serviceRequestReview.aggregate({
+          where: { providerProfileId: request.acceptedProviderProfileId! },
+          _avg: { rating: true },
+        });
+        await tx.providerProfile.update({
+          where: { id: request.acceptedProviderProfileId! },
+          data: { rating: aggregate._avg.rating ?? 0 },
+        });
+        return review;
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('برای این درخواست قبلاً نظر ثبت شده است');
+      }
+      throw error;
+    }
   }
 
   @ApiOperation({ summary: 'Create a new service request' })
@@ -300,14 +382,23 @@ export class ServiceRequestController {
     providerHourlyUnitLabel: string | null;
     providerEstimatedHours: number | null;
     scheduledAt: Date | null;
+    customerConfirmationDeadline: Date | null;
     createdAt: Date;
     skills: { skill: { name: string } }[];
     specialty: { name: string } | null;
     images: { id: string; url: string }[];
     acceptedProviderProfile: {
+      id: string;
       rating: number;
       user: { name: string };
     } | null;
+    review: {
+      id: string;
+      rating: number;
+      text: string | null;
+      createdAt: Date;
+    } | null;
+    payments: { id: string }[];
   }) {
     const provider = request.acceptedProviderProfile;
     const status =
@@ -335,6 +426,8 @@ export class ServiceRequestController {
       longitude: request.longitude,
       createdAt: request.createdAt.toISOString(),
       scheduledAt: request.scheduledAt?.toISOString(),
+      customerConfirmationDeadline:
+        request.customerConfirmationDeadline?.toISOString(),
       status,
       offersCount: provider ? 1 : 0,
       budget:
@@ -359,7 +452,7 @@ export class ServiceRequestController {
             : undefined,
       specialist: provider
         ? {
-            id: request.id,
+            id: provider.id,
             name: provider.user.name,
             field:
               request.specialty?.name ??
@@ -368,7 +461,16 @@ export class ServiceRequestController {
           }
         : undefined,
       images: request.images.map((image) => image.url),
-      reviewed: false,
+      reviewed: Boolean(request.review),
+      review: request.review
+        ? {
+            id: request.review.id,
+            rating: request.review.rating,
+            text: request.review.text,
+            createdAt: request.review.createdAt.toISOString(),
+          }
+        : null,
+      wasPaid: request.payments.length > 0,
     };
   }
 

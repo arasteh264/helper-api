@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class ReviewPayoutRequestDto {
   @ApiProperty({ enum: ['PAID', 'REJECTED'] })
@@ -7,14 +14,22 @@ export class ReviewPayoutRequestDto {
   decision!: 'PAID' | 'REJECTED';
 
   @ApiPropertyOptional({ description: 'Required for PAID decisions' })
-  @IsOptional()
+  @ValidateIf((dto: ReviewPayoutRequestDto) => dto.decision === 'PAID')
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
+  @MinLength(1)
   @MaxLength(100)
   referenceCode?: string;
 
   @ApiPropertyOptional({ description: 'Required for REJECTED decisions' })
-  @IsOptional()
+  @ValidateIf((dto: ReviewPayoutRequestDto) => dto.decision === 'REJECTED')
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
+  @MinLength(3)
   @MaxLength(500)
   rejectReason?: string;
 }

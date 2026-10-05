@@ -13,6 +13,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { BlogModule } from './modules/blog/blog.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ChatModule } from './modules/chat/chat.module';
     SpecialtiesModule,
     PaymentsModule,
     ChatModule,
+    BlogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

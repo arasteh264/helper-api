@@ -167,20 +167,37 @@ export class ChatService {
     };
   }
 
-  async listAdminMessages(conversationId: string) {
+  async listAdminMessages(
+    conversationId: string,
+    page = 1,
+    pageSize = 20,
+  ) {
     const conversation = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
       select: { id: true, status: true, pausedReason: true },
     });
     if (!conversation) throw new NotFoundException('گفتگو پیدا نشد');
 
-    const messages = await this.prisma.chatMessage.findMany({
-      where: { conversationId },
-      include: { sender: { select: { id: true, name: true, role: true } } },
-      orderBy: { createdAt: 'asc' },
-      take: 500,
-    });
-    return { conversation, messages };
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+    const where = { conversationId };
+    const [messages, total] = await this.prisma.$transaction([
+      this.prisma.chatMessage.findMany({
+        where,
+        include: { sender: { select: { id: true, name: true, role: true } } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        skip: (safePage - 1) * safePageSize,
+        take: safePageSize,
+      }),
+      this.prisma.chatMessage.count({ where }),
+    ]);
+    return {
+      conversation,
+      messages,
+      page: safePage,
+      pageSize: safePageSize,
+      total,
+    };
   }
 
   async setConversationStatus(

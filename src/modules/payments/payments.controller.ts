@@ -28,7 +28,7 @@ export class CustomerWalletPaymentsController {
   @Get()
   @ApiOperation({ summary: 'Get my customer wallet balance and top-ups' })
   getWallet(@CurrentUser() user: TokenPayload) {
-    this.assertCustomer(user);
+    this.assertWalletOwner(user);
     return this.paymentsService.getCustomerWallet(user.userId);
   }
 
@@ -38,16 +38,16 @@ export class CustomerWalletPaymentsController {
     @CurrentUser() user: TokenPayload,
     @Body() dto: CreateCustomerWalletTopupDto,
   ) {
-    this.assertCustomer(user);
+    this.assertWalletOwner(user);
     return this.paymentsService.createCustomerWalletTopup(
       user.userId,
       dto.amountToman,
     );
   }
 
-  private assertCustomer(user: TokenPayload) {
-    if (user.role !== 'CUSTOMER') {
-      throw new ForbiddenException('این کیف پول فقط برای مشتریان است');
+  private assertWalletOwner(user: TokenPayload) {
+    if (user.role !== 'CUSTOMER' && user.role !== 'PROVIDER') {
+      throw new ForbiddenException('این کیف پول برای خریداران خدمات است');
     }
   }
 }
@@ -86,6 +86,17 @@ export class CustomerPaymentsController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Pay for an accepted request from my wallet' })
+  @UseGuards(JwtAuthGuard)
+  @Post('service-requests/:requestId/wallet')
+  payFromWallet(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.paymentsService.payFromWallet(user.userId, requestId);
+  }
+
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payment status for a request I own' })
   @UseGuards(JwtAuthGuard)
   @Get('service-requests/:requestId')
@@ -94,6 +105,19 @@ export class CustomerPaymentsController {
     @Param('requestId') requestId: string,
   ) {
     return this.paymentsService.getCustomerPayment(user.userId, requestId);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Retry verification of my pending Zarinpal service payment',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Post('service-requests/:requestId/verify')
+  verifyPayment(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.paymentsService.verifyCustomerPayment(user.userId, requestId);
   }
 
   @ApiBearerAuth()

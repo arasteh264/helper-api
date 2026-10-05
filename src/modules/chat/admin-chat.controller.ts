@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/presentation/guards/jwt-auth.guard';
 import type { TokenPayload } from '../auth/domain/services/token-generator.port';
 import { ChatService } from './chat.service';
 import { ListChatConversationsQueryDto } from './dto/list-chat-conversations-query.dto';
+import { ListChatMessagesQueryDto } from './dto/list-chat-messages-query.dto';
 import { ModerateChatMessageDto } from './dto/moderate-chat-message.dto';
 import { UpdateChatConversationDto } from './dto/update-chat-conversation.dto';
 
@@ -35,11 +36,18 @@ export class AdminChatController {
   }
 
   @ApiOperation({
-    summary: 'Read every message in a conversation, including hidden messages',
+    summary: 'List conversation messages, including hidden messages',
   })
   @Get(':conversationId')
-  getMessages(@Param('conversationId') conversationId: string) {
-    return this.chatService.listAdminMessages(conversationId);
+  getMessages(
+    @Param('conversationId') conversationId: string,
+    @Query() query: ListChatMessagesQueryDto,
+  ) {
+    return this.chatService.listAdminMessages(
+      conversationId,
+      query.page ?? 1,
+      query.pageSize ?? 20,
+    );
   }
 
   @ApiOperation({ summary: 'Pause, resume or close a conversation' })

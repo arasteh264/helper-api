@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Query,
   UseGuards,
   BadRequestException,
   NotFoundException,
@@ -22,9 +23,9 @@ import { PROVIDER_DOCUMENT_REPOSITORY } from '../../application/documents/provid
 import type { ProviderDocumentRepository } from '../../application/documents/provider-document.repository';
 
 import { ProviderProfileDetailsResponseDto } from '../../application/dto/provider-profile-details-response.dto';
-import { ProviderVerificationStatus } from 'generated/prisma/enums';
+import { AdminPendingProvidersQueryDto } from '../../application/dto/admin-pending-providers-query.dto';
 import { GetProviderDocumentsForReviewUseCase } from '../../application/documents/get-provider-documents-for-review.use-case';
-import {  ReviewProviderDto } from '../../application/dto/review-provider-document.dto';
+import { ReviewProviderDto } from '../../application/dto/review-provider-document.dto';
 import { ReviewProviderDocumentUseCase } from '../../application/documents/review-provider-document.use-case';
 import { areRequiredDocumentsApproved } from '../../infrastructure/provider-documents.util';
 import { ReviewProviderDocumentDto } from '../../application/documents/review-provider-document.dto';
@@ -45,24 +46,27 @@ export class AdminProviderController {
 
   @ApiOperation({ summary: 'List all provider profiles pending review' })
   @Get('pending')
-  async listPending(@CurrentUser() _currentUser: TokenPayload) {
-    const providers =
-      await this.providerProfileRepository.findByVerificationStatus(
-        ProviderVerificationStatus.PENDING,
-      );
+  async listPending(
+    @CurrentUser() _currentUser: TokenPayload,
+    @Query() query: AdminPendingProvidersQueryDto,
+  ) {
+    const { items, total } =
+      await this.providerProfileRepository.findPendingDetailsPage({
+        skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 10),
+        take: query.pageSize ?? 10,
+        search: query.search?.trim() || undefined,
+        isAvailable:
+          query.available === undefined
+            ? undefined
+            : query.available === 'true',
+      });
 
-    const details = await Promise.all(
-      providers.map((profile) =>
-        this.providerProfileRepository.findDetailsByUserId(profile.userId),
+    return {
+      items: items.map((provider) =>
+        ProviderProfileDetailsResponseDto.from(provider),
       ),
-    );
-
-    return details
-      .filter(
-        (provider): provider is NonNullable<typeof provider> =>
-          provider !== null,
-      )
-      .map((provider) => ProviderProfileDetailsResponseDto.from(provider));
+      total,
+    };
   }
 
   @ApiOperation({ summary: 'Review a provider registration' })
@@ -101,9 +105,7 @@ export class AdminProviderController {
   @ApiOperation({ summary: 'Get all verification documents of a provider' })
   @Get(':providerProfileId/documents')
   getDocuments(@Param('providerProfileId') providerProfileId: string) {
-    return this.getProviderDocumentsForReviewUseCase.execute(
-      providerProfileId,
-    );
+    return this.getProviderDocumentsForReviewUseCase.execute(providerProfileId);
   }
 
   @ApiOperation({ summary: 'Approve or reject a verification document' })

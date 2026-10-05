@@ -47,12 +47,19 @@ export class AuthController {
     return this.loginUseCase.execute(dto);
   }
 
-  @ApiOperation({ summary: 'Request an OTP code' })
+  @ApiOperation({ summary: 'Request an OTP for login or registration' })
   @Post('otp/request')
   @HttpCode(HttpStatus.OK)
-  async requestOtp(@Body() dto: RequestOtpDto) {
+  async requestOtpForAuth(@Body() dto: RequestOtpDto) {
     await this.requestOtpUseCase.execute(dto.phone);
-    console.log(dto);
+    return { message: 'OTP sent' };
+  }
+
+  @ApiOperation({ summary: 'Resend registration OTP' })
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  async resendOtp(@Body() dto: RequestOtpDto) {
+    await this.requestOtpUseCase.execute(dto.phone);
     return { message: 'OTP sent' };
   }
 
@@ -60,7 +67,6 @@ export class AuthController {
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
   async verifyOtp(@Body() dto: VerifyOtpDto) {
-    console.log(dto);
     return this.verifyOtpUseCase.execute(dto.phone, dto.code);
   }
 

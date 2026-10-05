@@ -316,7 +316,14 @@ export class ProviderJobsUseCase {
         status: currentStatus,
         payments: { some: { status: 'PAID' } },
       },
-      data: { status: nextStatus },
+      data: {
+        status: nextStatus,
+        ...(nextStatus === 'AWAITING_CUSTOMER_CONFIRMATION' && {
+          customerConfirmationDeadline: new Date(
+            Date.now() + 72 * 60 * 60 * 1000,
+          ),
+        }),
+      },
     });
     if (!result.count)
       throw new ConflictException('وضعیت این کار تغییر کرده است');

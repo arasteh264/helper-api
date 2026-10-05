@@ -47,8 +47,8 @@ export class CreateUserUseCase {
 
     const passwordHash = await this.passwordHasher.hash(input.password);
     const otpCode = generateOtpCode();
-    const otpExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
-
+    const otpExpiresAt = new Date(Date.now() + 90 * 1000);
+    
     await this.prisma.pendingRegistration.upsert({
       where: { phone: input.phone },
       update: {

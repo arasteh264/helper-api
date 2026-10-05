@@ -5,8 +5,8 @@ import type { OtpSender } from '../../domain/services/otp-sender.port';
 export class LogOtpSender implements OtpSender {
   private readonly logger = new Logger(LogOtpSender.name);
 
-  async send(phone: string, code: string): Promise<void> {
-    this.logger.log(`OTP for ${phone}: ${code}`);
-    console.log(code);
+  send(): Promise<void> {
+    this.logger.warn('OTP delivery is disabled');
+    return Promise.resolve();
   }
 }

@@ -13,9 +13,10 @@ import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-
 import { SmsModule } from '../sms/sms.module';
 import { VerifyRegistrationOtpUseCase } from './application/verify-registration-otp.use-case';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { TokenModule } from '../auth/token.module';
 
 @Module({
-  imports: [SmsModule, NotificationsModule],
+  imports: [SmsModule, NotificationsModule, TokenModule],
   controllers: [UsersController],
 
   providers: [

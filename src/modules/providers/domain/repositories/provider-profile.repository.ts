@@ -53,6 +53,13 @@ export interface ProviderProfileRepository {
     status: ProviderVerificationStatus,
   ): Promise<ProviderProfile[]>;
 
+  findPendingDetailsPage(input: {
+    skip: number;
+    take: number;
+    search?: string;
+    isAvailable?: boolean;
+  }): Promise<{ items: ProviderProfileDetails[]; total: number }>;
+
   findAllApproved(): Promise<ProviderProfile[]>;
 
   findAllApprovedDetails(): Promise<ProviderProfileDetails[]>;

@@ -43,7 +43,6 @@ export class RequestOtpUseCase {
     }
 
     user.setOtp(code, expiresAt);
-    console.log(code);
     await this.userRepository.update(user);
 
     await this.otpSender.send(phone, code);

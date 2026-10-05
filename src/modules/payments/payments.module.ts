@@ -15,5 +15,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AdminPaymentsController,
   ],
   providers: [PaymentsService],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

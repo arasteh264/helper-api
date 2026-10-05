@@ -10,6 +10,7 @@ datasource db {
 
 enum UserRole {
   CUSTOMER
+  PROVIDER
   ADMIN
 }
 
@@ -17,6 +18,11 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
 }
 
 enum NotificationCategory {
@@ -67,10 +73,39 @@ model User {
   otpExpiresAt           DateTime?
   providerProfile        ProviderProfile?
   customerProfile        CustomerProfile?
+  reviewsGiven           ServiceRequestReview[] @relation("CustomerReviews")
   sentChatMessages       ChatMessage[]           @relation("ChatMessageSender")
   moderatedChatMessages  ChatMessage[]           @relation("ChatMessageModerator")
   notificationPreference NotificationPreference?
   notifications          Notification[]
+}
+
+model BlogPost {
+  id             String         @id @default(uuid())
+  slug           String         @unique
+  title          String
+  excerpt        String         @db.VarChar(320)
+  category       String
+  categorySlug   String
+  authorName     String
+  authorRole     String
+  content        Json
+  coverImage     String?
+  coverAlt       String?
+  coverTint      String         @default("from-emerald-500/25 via-emerald-500/10 to-transparent")
+  readingMinutes Int            @default(1)
+  seoTitle       String?
+  seoDescription String?        @db.VarChar(320)
+  canonicalUrl   String?
+  tags           String[]       @default([])
+  status         BlogPostStatus @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([status, publishedAt(sort: Desc), id])
+  @@index([categorySlug, status, publishedAt(sort: Desc)])
+  @@index([status, updatedAt(sort: Desc)])
 }
 
 model NotificationPreference {
@@ -157,6 +192,7 @@ model ProviderProfile {
   workingHours            ProviderWorkingHour[]
   wallet                  Wallet?
   bankAccount             ProviderBankAccount?
+  reviews                 ServiceRequestReview[]       @relation("ProviderReviews")
 }
 
 model SpecialtyGroup {
@@ -290,6 +326,11 @@ enum PreferredTime {
   FLEXIBLE
 }
 
+enum DisputeResolution {
+  PROVIDER
+  BUYER
+}
+
 model ServiceRequest {
   id                        String                @id @default(uuid())
   customerId                String
@@ -303,6 +344,11 @@ model ServiceRequest {
   title                     String
   description               String
   status                    ServiceRequestStatus  @default(OPEN)
+  customerConfirmationDeadline DateTime?
+  disputeResolution         DisputeResolution?
+  disputeResolutionNote     String?                @db.Text
+  disputeResolvedById       String?
+  disputeResolvedAt         DateTime?
 
   address   String?
   latitude  Float?
@@ -323,10 +369,29 @@ model ServiceRequest {
   providerDeclines        ProviderRequestDecline[]
   invitations             ProviderRequestInvitation[]
   payments                Payment[]
+  review                  ServiceRequestReview?
   chatConversation        ChatConversation?
 
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
+  @@index([customerId, status, createdAt, id])
+}
+
+model ServiceRequestReview {
+  id                String   @id @default(uuid())
+  serviceRequestId  String   @unique
+  customerId        String
+  providerProfileId String
+  rating            Int
+  text              String?  @db.Text
+  createdAt         DateTime @default(now())
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  customer        User            @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile @relation("ProviderReviews", fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([providerProfileId, createdAt])
+  @@index([customerId, createdAt])
 }
 
 enum ChatConversationStatus {
@@ -383,6 +448,7 @@ enum PaymentStatus {
 
 enum PaymentGateway {
   ZARINPAL
+  WALLET
 }
 
 model Payment {
@@ -395,6 +461,7 @@ model Payment {
   referenceId      String?
   failureReason    String?
   paidAt           DateTime?
+  lastVerificationAttemptAt DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -600,6 +667,7 @@ model CustomerWalletTopup {
   referenceId       String?
   failureReason     String?
   paidAt            DateTime?
+  lastVerificationAttemptAt DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
