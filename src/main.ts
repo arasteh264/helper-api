@@ -11,6 +11,7 @@ const configuredOrigins = [
   'https://helper-customer.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
+  'https://helper-customer-o9yddwupy-arasteh264-6629s-projects.vercel.app',
   ...(process.env.CORS_ORIGINS ?? '')
     .split(',')
     .map((origin) => origin.trim())
