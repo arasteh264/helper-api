@@ -21,8 +21,15 @@ const configuredOrigins = [
     origin: (origin, callback) => {
       const isLocalOrigin =
         /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin ?? '');
+      const isCustomerPreviewOrigin =
+        /^https:\/\/helper-customer-[a-z0-9-]+-arasteh264-6629s-projects\.vercel\.app$/i.test(
+          origin ?? '',
+        );
       const isAllowedOrigin =
-        !origin || isLocalOrigin || configuredOrigins.includes(origin);
+        !origin ||
+        isLocalOrigin ||
+        isCustomerPreviewOrigin ||
+        configuredOrigins.includes(origin);
       callback(null, isAllowedOrigin);
     },
     credentials: true,
