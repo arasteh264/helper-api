@@ -9,6 +9,7 @@ async function bootstrap() {
 
 const configuredOrigins = [
   'https://helper-customer.vercel.app',
+  'https://helper-admin-panel.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
   ...(process.env.CORS_ORIGINS ?? '')
