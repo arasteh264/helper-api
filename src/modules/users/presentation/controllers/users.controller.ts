@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   NotFoundException,
   Param,
   Patch,
@@ -30,7 +31,8 @@ import { AdminGuard } from '../../../auth/presentation/guards/admin.guard';
 import { VerifyRegistrationOtpDto } from '../../application/dto/verify-registration-otp.dto';
 import { VerifyRegistrationOtpUseCase } from '../../application/verify-registration-otp.use-case';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
-import { SmsService } from '../../../sms/sms.service';
+import type { OtpSender } from '../../../auth/domain/services/otp-sender.port';
+import { OTP_SENDER } from '../../../auth/domain/services/otp-sender.token';
 
 @ApiTags('Users')
 @Controller('users')
@@ -42,7 +44,7 @@ export class UsersController {
     private readonly updateUserUseCase: UpdateUserUseCase,
     private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
     private readonly prisma: PrismaService,
-    private readonly smsService: SmsService,
+    @Inject(OTP_SENDER) private readonly otpSender: OtpSender,
   ) {}
 
   @ApiOperation({ summary: 'Create a new user' })
@@ -85,7 +87,7 @@ export class UsersController {
       data: { otpCode, otpExpiresAt },
     });
 
-    await this.smsService.sendOtp(dto.phone, otpCode);
+    await this.otpSender.send(pending.email, otpCode, 90);
 
     return { message: 'OTP sent' };
   }

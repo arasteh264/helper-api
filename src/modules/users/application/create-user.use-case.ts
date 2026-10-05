@@ -3,7 +3,8 @@ import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
 import * as userRepository from '../domain/repositories/user.repository';
 import * as passwordHasherPort from '../domain/services/password-hasher.port';
 import { PASSWORD_HASHER } from '../domain/services/password-hasher.token';
-import { SmsService } from '../../sms/sms.service';
+import type { OtpSender } from '../../auth/domain/services/otp-sender.port';
+import { OTP_SENDER } from '../../auth/domain/services/otp-sender.token';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 
 interface CreateUserInput {
@@ -24,7 +25,8 @@ export class CreateUserUseCase {
     private readonly userRepository: userRepository.UserRepository,
     @Inject(PASSWORD_HASHER)
     private readonly passwordHasher: passwordHasherPort.PasswordHasher,
-    private readonly smsService: SmsService,
+    @Inject(OTP_SENDER)
+    private readonly otpSender: OtpSender,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -67,6 +69,6 @@ export class CreateUserUseCase {
         otpExpiresAt,
       },
     });
-    await this.smsService.sendOtp(input.phone, otpCode);
+    await this.otpSender.send(input.email, otpCode, 90);
   }
 }

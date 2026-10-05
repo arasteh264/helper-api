@@ -10,13 +10,12 @@ import { GetAllUserUseCase } from './application/get-allUser.use-case';
 import { UpdateUserUseCase } from './application/update-user.use-case';
 import { PASSWORD_HASHER } from './domain/services/password-hasher.token';
 import { BcryptPasswordHasher } from './infrastructure/services/bcrypt-password-hasher';
-import { SmsModule } from '../sms/sms.module';
 import { VerifyRegistrationOtpUseCase } from './application/verify-registration-otp.use-case';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TokenModule } from '../auth/token.module';
 
 @Module({
-  imports: [SmsModule, NotificationsModule, TokenModule],
+  imports: [NotificationsModule, TokenModule],
   controllers: [UsersController],
 
   providers: [

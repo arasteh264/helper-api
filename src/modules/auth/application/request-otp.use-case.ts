@@ -1,4 +1,8 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import type { UserRepository } from '../../users/domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
 import type { OtpSender } from '../domain/services/otp-sender.port';
@@ -34,7 +38,7 @@ export class RequestOtpUseCase {
         expiresAt,
       );
       await this.userRepository.save(user);
-      await this.otpSender.send(phone, code);
+      await this.otpSender.send(user.email, code);
       return;
     }
 
@@ -45,6 +49,6 @@ export class RequestOtpUseCase {
     user.setOtp(code, expiresAt);
     await this.userRepository.update(user);
 
-    await this.otpSender.send(phone, code);
+    await this.otpSender.send(user.email, code);
   }
 }

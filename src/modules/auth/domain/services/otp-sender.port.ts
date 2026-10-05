@@ -1,3 +1,3 @@
 export interface OtpSender {
-  send(phone: string, code: string): Promise<void>;
+  send(email: string, code: string, expiresInSeconds?: number): Promise<void>;
 }
