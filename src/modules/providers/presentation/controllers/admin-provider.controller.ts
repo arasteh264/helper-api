@@ -44,7 +44,7 @@ export class AdminProviderController {
     private readonly reviewProviderDocumentUseCase: ReviewProviderDocumentUseCase,
   ) {}
 
-  @ApiOperation({ summary: 'List all provider profiles pending review' })
+  @ApiOperation({ summary: 'List provider profiles by verification status' })
   @Get('pending')
   async listPending(
     @CurrentUser() _currentUser: TokenPayload,
@@ -55,6 +55,7 @@ export class AdminProviderController {
         skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 10),
         take: query.pageSize ?? 10,
         search: query.search?.trim() || undefined,
+        status: query.status,
         isAvailable:
           query.available === undefined
             ? undefined

@@ -58,6 +58,7 @@ export interface ProviderProfileRepository {
     take: number;
     search?: string;
     isAvailable?: boolean;
+    status?: ProviderVerificationStatus;
   }): Promise<{ items: ProviderProfileDetails[]; total: number }>;
 
   findAllApproved(): Promise<ProviderProfile[]>;

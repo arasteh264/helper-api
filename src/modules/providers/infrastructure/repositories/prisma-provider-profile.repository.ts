@@ -220,9 +220,10 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     take: number;
     search?: string;
     isAvailable?: boolean;
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED';
   }): Promise<{ items: ProviderProfileDetails[]; total: number }> {
     const where = {
-      verificationStatus: 'PENDING' as const,
+      verificationStatus: input.status ?? 'PENDING',
       ...(input.isAvailable === undefined
         ? {}
         : { isAvailable: input.isAvailable }),
