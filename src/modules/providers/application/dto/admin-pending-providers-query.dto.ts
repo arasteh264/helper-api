@@ -10,4 +10,9 @@ export class AdminPendingProvidersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(['true', 'false'])
   available?: 'true' | 'false';
+
+  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
+  @IsOptional()
+  @IsIn(['PENDING', 'APPROVED', 'REJECTED'])
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
