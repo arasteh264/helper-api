@@ -25,11 +25,7 @@ export class PrismaCustomerOverviewReader implements CustomerOverviewReader {
       this.prisma.serviceRequest.count({
         where: { customerId: userId, status: 'COMPLETED' },
       }),
-      this.prisma.serviceRequest.findMany({
-        where: { customerId: userId, address: { not: null } },
-        distinct: ['address'],
-        select: { address: true },
-      }),
+      this.prisma.customerAddress.count({ where: { customerId: userId } }),
     ]);
 
     return {
@@ -37,7 +33,7 @@ export class PrismaCustomerOverviewReader implements CustomerOverviewReader {
       memberSince: user.createdAt,
       activeRequests,
       completedJobs,
-      addressesCount: addresses.length, // TODO: بعد از ساخت مدل Address
+      addressesCount: addresses,
     };
   }
 }

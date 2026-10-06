@@ -1,5 +1,4 @@
 import { ConflictException } from '@nestjs/common';
-import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 import { ServiceRequestController } from './service-request.controller';
 
 jest.mock('../../../../infrastructure/database/prisma.service', () => ({
@@ -23,6 +22,7 @@ describe('ServiceRequestController reviews', () => {
   const prisma = {
     serviceRequest: {
       findFirst: jest.fn(),
+      updateMany: jest.fn(),
     },
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
       callback(tx),
@@ -36,7 +36,7 @@ describe('ServiceRequestController reviews', () => {
     {} as never,
     {} as never,
   );
-  const customer = { userId: 'customer-1', role: 'CUSTOMER' } as TokenPayload;
+  const customer = { userId: 'customer-1', role: 'CUSTOMER' };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -49,6 +49,7 @@ describe('ServiceRequestController reviews', () => {
     tx.serviceRequestReview.aggregate.mockResolvedValue({
       _avg: { rating: 4.5 },
     });
+    prisma.serviceRequest.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it('stores one review and updates the provider average for an owned completed job', async () => {
@@ -67,18 +68,20 @@ describe('ServiceRequestController reviews', () => {
         customerId: 'customer-1',
         status: 'COMPLETED',
       },
-      select: expect.objectContaining({
+      select: {
+        id: true,
         acceptedProviderProfileId: true,
         review: { select: { id: true } },
-      }),
+      },
     });
     expect(tx.serviceRequestReview.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: {
         serviceRequestId: 'request-1',
         customerId: 'customer-1',
         providerProfileId: 'provider-profile-1',
         rating: 5,
-      }),
+        text: 'کار عالی بود',
+      },
       select: { id: true, rating: true, text: true, createdAt: true },
     });
     expect(tx.providerProfile.update).toHaveBeenCalledWith({
@@ -101,5 +104,62 @@ describe('ServiceRequestController reviews', () => {
       }),
     ).rejects.toThrow(ConflictException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('updates only an owned open request and clears optional values', async () => {
+    const updatedAt = new Date('2026-10-05T08:00:00.000Z');
+    prisma.serviceRequest.findFirst.mockResolvedValueOnce({
+      id: 'request-1',
+      status: 'OPEN',
+      budgetMin: 100,
+      budgetMax: 200,
+      latitude: 35,
+      longitude: 51,
+      updatedAt,
+    });
+
+    const result = await controller.updateMine(customer, 'request-1', {
+      title: 'عنوان درخواست جدید',
+      address: 'تهران، گیشا، خیابان کوشک',
+      scheduledAt: null,
+      budgetMin: null,
+      budgetMax: null,
+    });
+
+    expect(prisma.serviceRequest.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'request-1',
+        customerId: 'customer-1',
+        status: 'OPEN',
+        updatedAt,
+      },
+      data: {
+        title: 'عنوان درخواست جدید',
+        address: 'تهران، گیشا، خیابان کوشک',
+        scheduledAt: null,
+        budgetMin: null,
+        budgetMax: null,
+      },
+    });
+    expect(result).toEqual({ id: 'request-1', message: 'درخواست ویرایش شد' });
+  });
+
+  it('rejects edits when the request is no longer open', async () => {
+    prisma.serviceRequest.findFirst.mockResolvedValueOnce({
+      id: 'request-1',
+      status: 'OFFER_ACCEPTED',
+      budgetMin: null,
+      budgetMax: null,
+      latitude: null,
+      longitude: null,
+      updatedAt: new Date(),
+    });
+
+    await expect(
+      controller.updateMine(customer, 'request-1', {
+        title: 'عنوان درخواست جدید',
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.serviceRequest.updateMany).not.toHaveBeenCalled();
   });
 });

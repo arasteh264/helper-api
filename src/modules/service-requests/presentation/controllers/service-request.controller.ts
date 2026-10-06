@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
   ForbiddenException,
   Get,
   NotFoundException,
+  Patch,
   Param,
   Post,
   Query,
@@ -40,6 +42,21 @@ import { MatchProvidersForRequestUseCase } from '../../../../modules/matching/ap
 import { Logger } from '@nestjs/common';
 import { CreateServiceRequestReviewDto } from '../../application/dto/create-service-request-review.dto';
 import { MyServiceRequestsQueryDto } from '../../../../modules/customers/application/dto/my-service-requests-query.dto';
+import { UpdateServiceRequestDto } from '../../application/dto/update-service-request.dto';
+
+function isUniqueConstraintError(error: unknown): boolean {
+  if (
+    !(error instanceof Error) ||
+    error.constructor.name !== 'PrismaClientKnownRequestError'
+  ) {
+    return false;
+  }
+  const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
+  return (
+    typeof codeDescriptor?.value === 'string' &&
+    codeDescriptor.value === 'P2002'
+  );
+}
 @ApiTags('Service Requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -227,6 +244,106 @@ export class ServiceRequestController {
     return this.toCustomerView(request);
   }
 
+  @ApiOperation({
+    summary: 'Update my service request before a provider accepts it',
+  })
+  @Patch(':id')
+  async updateMine(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceRequestDto,
+  ) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: { id, customerId: currentUser.userId },
+      select: {
+        id: true,
+        status: true,
+        budgetMin: true,
+        budgetMax: true,
+        latitude: true,
+        longitude: true,
+        updatedAt: true,
+      },
+    });
+    if (!request) throw new NotFoundException('درخواست پیدا نشد');
+    if (request.status !== 'OPEN') {
+      throw new ConflictException(
+        'ویرایش درخواست پس از دریافت پیشنهاد متخصص امکان‌پذیر نیست',
+      );
+    }
+
+    const hasChanges = Object.values(dto).some((value) => value !== undefined);
+    if (!hasChanges) {
+      throw new BadRequestException('حداقل یک فیلد برای ویرایش ارسال کنید');
+    }
+
+    const budgetMin =
+      dto.budgetMin === undefined ? request.budgetMin : dto.budgetMin;
+    const budgetMax =
+      dto.budgetMax === undefined ? request.budgetMax : dto.budgetMax;
+    if (
+      (dto.budgetMin !== undefined || dto.budgetMax !== undefined) &&
+      (budgetMin === null) !== (budgetMax === null)
+    ) {
+      throw new BadRequestException(
+        'حداقل و حداکثر بودجه را با هم ثبت یا پاک کنید',
+      );
+    }
+    if (
+      (dto.budgetMin !== undefined || dto.budgetMax !== undefined) &&
+      budgetMin !== null &&
+      budgetMax !== null &&
+      budgetMin > budgetMax
+    ) {
+      throw new BadRequestException(
+        'حداقل بودجه نباید از حداکثر بودجه بیشتر باشد',
+      );
+    }
+
+    const latitude =
+      dto.latitude === undefined ? request.latitude : dto.latitude;
+    const longitude =
+      dto.longitude === undefined ? request.longitude : dto.longitude;
+    if (
+      (dto.latitude !== undefined || dto.longitude !== undefined) &&
+      (latitude === null) !== (longitude === null)
+    ) {
+      throw new BadRequestException(
+        'طول و عرض جغرافیایی باید هم‌زمان ثبت یا پاک شوند',
+      );
+    }
+
+    const result = await this.prisma.serviceRequest.updateMany({
+      where: {
+        id: request.id,
+        customerId: currentUser.userId,
+        status: 'OPEN',
+        updatedAt: request.updatedAt,
+      },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title.trim() }),
+        ...(dto.description !== undefined && {
+          description: dto.description.trim(),
+        }),
+        ...(dto.address !== undefined && { address: dto.address.trim() }),
+        ...(dto.latitude !== undefined && { latitude: dto.latitude }),
+        ...(dto.longitude !== undefined && { longitude: dto.longitude }),
+        ...(dto.scheduledAt !== undefined && {
+          scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+        }),
+        ...(dto.budgetMin !== undefined && { budgetMin: dto.budgetMin }),
+        ...(dto.budgetMax !== undefined && { budgetMax: dto.budgetMax }),
+      },
+    });
+    if (result.count === 0) {
+      throw new ConflictException(
+        'درخواست هم‌زمان تغییر کرده است؛ صفحه را تازه‌سازی کنید',
+      );
+    }
+
+    return { id: request.id, message: 'درخواست ویرایش شد' };
+  }
+
   @ApiOperation({ summary: 'Review a completed service request' })
   @Post(':id/review')
   async reviewCompletedRequest(
@@ -276,12 +393,7 @@ export class ServiceRequestController {
         return review;
       });
     } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === 'P2002'
-      ) {
+      if (isUniqueConstraintError(error)) {
         throw new ConflictException('برای این درخواست قبلاً نظر ثبت شده است');
       }
       throw error;

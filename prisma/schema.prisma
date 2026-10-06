@@ -20,6 +20,12 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum CustomerAddressType {
+  HOME
+  WORK
+  OTHER
+}
+
 enum BlogPostStatus {
   DRAFT
   PUBLISHED
@@ -73,7 +79,8 @@ model User {
   otpExpiresAt           DateTime?
   providerProfile        ProviderProfile?
   customerProfile        CustomerProfile?
-  reviewsGiven           ServiceRequestReview[] @relation("CustomerReviews")
+  addresses              CustomerAddress[]
+  reviewsGiven           ServiceRequestReview[]  @relation("CustomerReviews")
   sentChatMessages       ChatMessage[]           @relation("ChatMessageSender")
   moderatedChatMessages  ChatMessage[]           @relation("ChatMessageModerator")
   notificationPreference NotificationPreference?
@@ -685,4 +692,27 @@ model CustomerProfile {
 
   user   User            @relation(fields: [userId], references: [id])
   wallet CustomerWallet?
+}
+
+model CustomerAddress {
+  id            String              @id @default(uuid())
+  customerId    String
+  title         String
+  type          CustomerAddressType @default(HOME)
+  receiverName  String
+  receiverPhone String
+  city          String
+  fullAddress   String
+  plaque        String
+  unit          String              @default("")
+  postalCode    String
+  latitude      Float?
+  longitude     Float?
+  isDefault     Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isDefault, createdAt])
 }
