@@ -53,6 +53,11 @@ enum ProviderVerificationStatus {
   REJECTED
 }
 
+enum ProviderAddressType {
+  HOME
+  BUSINESS
+}
+
 enum ProviderDocumentType {
   NATIONAL_CARD
   BUSINESS_LICENSE
@@ -63,28 +68,30 @@ enum ProviderDocumentType {
 }
 
 model User {
-  id                     String                  @id @default(uuid())
+  id                     String                         @id @default(uuid())
   name                   String
-  email                  String                  @unique
-  phone                  String                  @unique
+  email                  String                         @unique
+  phone                  String                         @unique
   passwordHash           String?
-  googleId               String?                 @unique
+  googleId               String?                        @unique
   role                   UserRole
   status                 UserStatus
   resetToken             String?
   resetTokenExpiry       DateTime?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
   otpCode                String?
   otpExpiresAt           DateTime?
   providerProfile        ProviderProfile?
   customerProfile        CustomerProfile?
+  serviceRequests        ServiceRequest[]               @relation("CustomerServiceRequests")
   addresses              CustomerAddress[]
-  reviewsGiven           ServiceRequestReview[]  @relation("CustomerReviews")
-  sentChatMessages       ChatMessage[]           @relation("ChatMessageSender")
-  moderatedChatMessages  ChatMessage[]           @relation("ChatMessageModerator")
+  reviewsGiven           ServiceRequestReview[]         @relation("CustomerReviews")
+  sentChatMessages       ChatMessage[]                  @relation("ChatMessageSender")
+  moderatedChatMessages  ChatMessage[]                  @relation("ChatMessageModerator")
   notificationPreference NotificationPreference?
   notifications          Notification[]
+  disputeMessages        ServiceRequestDisputeMessage[]
 }
 
 model BlogPost {
@@ -183,6 +190,9 @@ model ProviderProfile {
   isAvailable          Boolean                    @default(false)
   serviceAreaLatitude  Float?
   serviceAreaLongitude Float?
+  serviceAreaRadiusKm  Float                      @default(10)
+  providerAddress      String?                    @db.Text
+  providerAddressType  ProviderAddressType        @default(HOME)
   avatarUrl            String?
   avatarPublicId       String?
   createdAt            DateTime                   @default(now())
@@ -196,10 +206,9 @@ model ProviderProfile {
   acceptedServiceRequests ServiceRequest[]            @relation("AcceptedServiceRequests")
   requestDeclines         ProviderRequestDecline[]
   requestInvitations      ProviderRequestInvitation[]
-  workingHours            ProviderWorkingHour[]
   wallet                  Wallet?
   bankAccount             ProviderBankAccount?
-  reviews                 ServiceRequestReview[]       @relation("ProviderReviews")
+  reviews                 ServiceRequestReview[]      @relation("ProviderReviews")
 }
 
 model SpecialtyGroup {
@@ -280,22 +289,6 @@ model ProviderDocument {
   @@index([providerProfileId, createdAt])
 }
 
-model ProviderWorkingHour {
-  id                String   @id @default(uuid())
-  providerProfileId String
-  dayOfWeek         Int
-  isActive          Boolean  @default(true)
-  startTime         String
-  endTime           String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
-
-  @@unique([providerProfileId, dayOfWeek])
-  @@index([dayOfWeek, isActive])
-}
-
 model Skill {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -338,24 +331,36 @@ enum DisputeResolution {
   BUYER
 }
 
+enum DisputeReason {
+  WORK_NOT_COMPLETED
+  WORK_QUALITY
+  PRICE_DISAGREEMENT
+  PROVIDER_NO_SHOW
+  CUSTOMER_NON_PAYMENT
+  OTHER
+}
+
 model ServiceRequest {
-  id                        String                @id @default(uuid())
-  customerId                String
-  acceptedProviderProfileId String?
-  specialtyId               String?
-  providerPriceToman        Int?
-  providerPricingMode       SpecialtyPricingMode?
-  providerHourlyRateToman   Int?
-  providerHourlyUnitLabel   String?
-  providerEstimatedHours    Float?
-  title                     String
-  description               String
-  status                    ServiceRequestStatus  @default(OPEN)
+  id                           String                @id @default(uuid())
+  customerId                   String
+  acceptedProviderProfileId    String?
+  specialtyId                  String?
+  providerPriceToman           Int?
+  providerPricingMode          SpecialtyPricingMode?
+  providerHourlyRateToman      Int?
+  providerHourlyUnitLabel      String?
+  providerEstimatedHours       Float?
+  title                        String
+  description                  String
+  status                       ServiceRequestStatus  @default(OPEN)
   customerConfirmationDeadline DateTime?
-  disputeResolution         DisputeResolution?
-  disputeResolutionNote     String?                @db.Text
-  disputeResolvedById       String?
-  disputeResolvedAt         DateTime?
+  disputeResolution            DisputeResolution?
+  disputeResolutionNote        String?               @db.Text
+  disputeResolvedById          String?
+  disputeResolvedAt            DateTime?
+  disputeReason                DisputeReason?
+  disputeDescription           String?               @db.Text
+  disputeUpdatedAt             DateTime?
 
   address   String?
   latitude  Float?
@@ -370,18 +375,33 @@ model ServiceRequest {
   updatedAt DateTime @updatedAt
 
   skills                  ServiceRequestSkill[]
-  specialty               Specialty?                  @relation(fields: [specialtyId], references: [id])
+  specialty               Specialty?                     @relation(fields: [specialtyId], references: [id])
   images                  ServiceRequestImage[]
-  acceptedProviderProfile ProviderProfile?            @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
+  acceptedProviderProfile ProviderProfile?               @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
+  customer                User                           @relation("CustomerServiceRequests", fields: [customerId], references: [id], onDelete: Cascade)
   providerDeclines        ProviderRequestDecline[]
   invitations             ProviderRequestInvitation[]
   payments                Payment[]
   review                  ServiceRequestReview?
   chatConversation        ChatConversation?
+  disputeMessages         ServiceRequestDisputeMessage[]
 
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
   @@index([customerId, status, createdAt, id])
+}
+
+model ServiceRequestDisputeMessage {
+  id               String         @id @default(uuid())
+  serviceRequestId String
+  authorUserId     String
+  body             String         @db.Text
+  createdAt        DateTime       @default(now())
+  serviceRequest   ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  author           User           @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([serviceRequestId, createdAt])
+  @@index([authorUserId, createdAt])
 }
 
 model ServiceRequestReview {
@@ -459,18 +479,18 @@ enum PaymentGateway {
 }
 
 model Payment {
-  id               String         @id @default(uuid())
-  serviceRequestId String
-  amountToman      Int
-  gateway          PaymentGateway @default(ZARINPAL)
-  status           PaymentStatus  @default(PENDING)
-  authority        String?        @unique
-  referenceId      String?
-  failureReason    String?
-  paidAt           DateTime?
+  id                        String         @id @default(uuid())
+  serviceRequestId          String
+  amountToman               Int
+  gateway                   PaymentGateway @default(ZARINPAL)
+  status                    PaymentStatus  @default(PENDING)
+  authority                 String?        @unique
+  referenceId               String?
+  failureReason             String?
+  paidAt                    DateTime?
   lastVerificationAttemptAt DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
 
@@ -660,23 +680,23 @@ model CustomerWallet {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id])
+  customerProfile CustomerProfile       @relation(fields: [customerProfileId], references: [id])
   topups          CustomerWalletTopup[]
 }
 
 model CustomerWalletTopup {
-  id                String        @id @default(uuid())
-  customerWalletId  String
-  amountToman       Int
-  gateway           PaymentGateway @default(ZARINPAL)
-  status            PaymentStatus  @default(PENDING)
-  authority         String?        @unique
-  referenceId       String?
-  failureReason     String?
-  paidAt            DateTime?
+  id                        String         @id @default(uuid())
+  customerWalletId          String
+  amountToman               Int
+  gateway                   PaymentGateway @default(ZARINPAL)
+  status                    PaymentStatus  @default(PENDING)
+  authority                 String?        @unique
+  referenceId               String?
+  failureReason             String?
+  paidAt                    DateTime?
   lastVerificationAttemptAt DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   customerWallet CustomerWallet @relation(fields: [customerWalletId], references: [id], onDelete: Cascade)
 

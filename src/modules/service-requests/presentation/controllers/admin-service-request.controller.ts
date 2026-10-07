@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +18,8 @@ import { AdminListServiceRequestsUseCase } from '../../application/admin-list-se
 import { AdminListServiceRequestsQueryDto } from '../../application/dto/admin-list-service-requests-query.dto';
 import { ResolveServiceRequestDisputeDto } from '../../application/dto/resolve-service-request-dispute.dto';
 import { PaymentsService } from '../../../payments/payments.service';
+import { CreateServiceRequestDisputeMessageDto } from '../../../payments/dto/create-service-request-dispute-message.dto';
+import { AdminServiceRequestActionsUseCases } from '../../application/admin-service-request-actions.use-cases';
 
 @ApiTags('Admin - Service Requests')
 @ApiBearerAuth()
@@ -25,6 +29,7 @@ export class AdminServiceRequestController {
   constructor(
     private readonly listUseCase: AdminListServiceRequestsUseCase,
     private readonly paymentsService: PaymentsService,
+    private readonly actionsUseCases: AdminServiceRequestActionsUseCases,
   ) {}
 
   @ApiOperation({ summary: 'List all service requests (admin)' })
@@ -47,6 +52,38 @@ export class AdminServiceRequestController {
       sortBy: query.sortBy ?? 'createdAt',
       sortOrder: query.sortOrder ?? 'desc',
     });
+  }
+
+  @ApiOperation({ summary: 'Get full service request details for admin review' })
+  @Get(':id/details')
+  getDetails(@Param('id') id: string) {
+    return this.actionsUseCases.getDetails(id);
+  }
+
+  @ApiOperation({ summary: 'Cancel an incomplete unpaid open service request' })
+  @Delete(':id')
+  cancelIncomplete(@Param('id') id: string) {
+    return this.actionsUseCases.cancelIncomplete(id);
+  }
+
+  @ApiOperation({ summary: 'Resolve a disputed paid service request' })
+  @Get(':id/dispute')
+  getDispute(@Param('id') id: string) {
+    return this.paymentsService.getDisputeForAdmin(id);
+  }
+
+  @ApiOperation({ summary: 'Send a message to both participants in a dispute' })
+  @Post(':id/dispute/messages')
+  addDisputeMessage(
+    @CurrentUser() admin: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateServiceRequestDisputeMessageDto,
+  ) {
+    return this.paymentsService.addAdminDisputeMessage(
+      id,
+      admin.userId,
+      dto.body,
+    );
   }
 
   @ApiOperation({ summary: 'Resolve a disputed paid service request' })

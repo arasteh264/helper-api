@@ -50,6 +50,7 @@ export class PrismaMatchingRepository implements MatchingRepository {
       where: {
         verificationStatus: 'APPROVED',
         isAvailable: true,
+        providerAddress: { not: null },
         userId: { not: request.customerId },
         serviceAreaLatitude: { not: null },
         serviceAreaLongitude: { not: null },
@@ -65,12 +66,14 @@ export class PrismaMatchingRepository implements MatchingRepository {
         id: true,
         serviceAreaLatitude: true,
         serviceAreaLongitude: true,
+        serviceAreaRadiusKm: true,
       },
     });
     return providers.map((p) => ({
       providerProfileId: p.id,
       latitude: p.serviceAreaLatitude!,
       longitude: p.serviceAreaLongitude!,
+      serviceAreaRadiusKm: p.serviceAreaRadiusKm,
     }));
   }
 

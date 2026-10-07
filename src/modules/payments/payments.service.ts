@@ -13,6 +13,7 @@ import {
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PRISMA_SERVICE } from '../../infrastructure/database/prisma.service.token';
 import { NotificationsService } from '../notifications/notifications.service';
+import type { DisputeReason } from '../../../generated/prisma/enums';
 
 type ZarinpalReply = {
   data?: {
@@ -576,6 +577,21 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       );
     });
 
+    if (result.providerUserId) {
+      try {
+        await this.notifications.sendProviderJobConfirmationEmail(
+          result.providerUserId,
+          result.title,
+          result.requestId,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Provider payment confirmation email could not be sent',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+
     return {
       status: 'PAID' as const,
       requestId: result.requestId,
@@ -681,7 +697,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const paymentConfirmed = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.payment.updateMany({
         where: { id: payment.id, status: 'PENDING' },
         data: {
@@ -699,7 +715,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         if (current?.status !== 'PAID') {
           throw new ConflictException('وضعیت پرداخت تغییر کرده است');
         }
-        return;
+        return false;
       }
 
       const request = await tx.serviceRequest.updateMany({
@@ -712,7 +728,26 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       if (request.count === 0) {
         throw new ConflictException('وضعیت درخواست برای پرداخت معتبر نیست');
       }
+      return true;
     });
+
+    if (
+      paymentConfirmed &&
+      payment.serviceRequest.acceptedProviderProfile?.userId
+    ) {
+      try {
+        await this.notifications.sendProviderJobConfirmationEmail(
+          payment.serviceRequest.acceptedProviderProfile.userId,
+          payment.serviceRequest.title,
+          payment.serviceRequestId,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Provider payment confirmation email could not be sent',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
 
     const paymentBody = `پرداخت درخواست «${payment.serviceRequest.title}» با موفقیت انجام شد.`;
     await Promise.all([
@@ -978,13 +1013,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     expectedStatus:
       | 'AWAITING_CUSTOMER_CONFIRMATION'
       | 'DISPUTED' = 'AWAITING_CUSTOMER_CONFIRMATION',
-    adminResolution?: {
+    disputeResolution?: {
       resolution: 'PROVIDER' | 'BUYER';
-      adminUserId: string;
+      resolvedByUserId: string;
       reason: string;
+      actor: 'ADMIN' | 'CUSTOMER';
     },
   ) {
-    const adminResolvedDispute = expectedStatus === 'DISPUTED';
+    const adminResolvedDispute =
+      expectedStatus === 'DISPUTED' && disputeResolution?.actor === 'ADMIN';
+    const customerConfirmedDispute =
+      expectedStatus === 'DISPUTED' && disputeResolution?.actor === 'CUSTOMER';
     const completion = await this.prisma.$transaction(async (tx) => {
       const request = await tx.serviceRequest.findFirst({
         where: {
@@ -1021,11 +1060,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         data: {
           status: 'COMPLETED',
           customerConfirmationDeadline: null,
-          ...(adminResolution
+          ...(disputeResolution
             ? {
-                disputeResolution: adminResolution.resolution,
-                disputeResolutionNote: adminResolution.reason,
-                disputeResolvedById: adminResolution.adminUserId,
+                disputeResolution: disputeResolution.resolution,
+                disputeResolutionNote: disputeResolution.reason,
+                disputeResolvedById: disputeResolution.resolvedByUserId,
                 disputeResolvedAt: new Date(),
               }
             : {}),
@@ -1088,6 +1127,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           ? 'به دلیل ثبت‌نشدن پاسخ در مهلت مقرر، کار تکمیل و درآمد provider تسویه شد'
           : adminResolvedDispute
             ? 'اختلاف به نفع provider تعیین‌تکلیف و درآمد تسویه شد'
+            : customerConfirmedDispute
+              ? 'مشتری اختلاف را پس گرفت و انجام کار را تأیید کرد'
             : 'اتمام کار تأیید و درآمد provider تسویه شد',
         releasedAmountToman: request.providerPriceToman - commission,
         providerUserId: request.acceptedProviderProfile.userId,
@@ -1104,11 +1145,15 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           ? 'درخواست به‌طور خودکار تکمیل شد'
           : adminResolvedDispute
             ? 'اختلاف به نفع شما تعیین‌تکلیف شد'
+            : customerConfirmedDispute
+              ? 'مشتری اختلاف را پس گرفت و کار را تأیید کرد'
             : 'پایان کار تأیید شد',
         body: autoConfirmed
           ? `مهلت پاسخ مشتری برای درخواست «${completion.requestTitle}» به پایان رسید و درآمد آزاد شد.`
           : adminResolvedDispute
             ? `پس از بررسی اختلاف درخواست «${completion.requestTitle}»، درآمد برای شما آزاد شد.`
+            : customerConfirmedDispute
+              ? `مشتری اختلاف درخواست «${completion.requestTitle}» را پس گرفت و انجام کار را تأیید کرد؛ درآمد برای شما آزاد شد.`
             : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
         serviceRequestId: requestId,
       }),
@@ -1149,7 +1194,26 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async raiseDispute(userId: string, requestId: string) {
+  async confirmDisputedCompletion(userId: string, requestId: string) {
+    return this.confirmCompletion(userId, requestId, false, 'DISPUTED', {
+      resolution: 'PROVIDER',
+      resolvedByUserId: userId,
+      actor: 'CUSTOMER',
+      reason: 'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
+    });
+  }
+
+  async raiseDispute(
+    userId: string,
+    requestId: string,
+    reason: DisputeReason,
+    description: string,
+  ) {
+    if (reason === 'CUSTOMER_NON_PAYMENT') {
+      throw new BadRequestException(
+        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
+      );
+    }
     const now = new Date();
     const request = await this.prisma.serviceRequest.findFirst({
       where: {
@@ -1175,22 +1239,242 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       data: {
         status: 'DISPUTED',
         customerConfirmationDeadline: null,
+        disputeReason: reason,
+        disputeDescription: description.trim(),
+        disputeUpdatedAt: now,
       },
     });
     if (!result.count) {
       throw new ConflictException('این درخواست آماده‌ی ثبت اختلاف نیست');
     }
     if (request?.acceptedProviderProfile) {
-      await this.notifications.createForUser({
-        userId: request.acceptedProviderProfile.userId,
-        category: 'WORK_UPDATES',
-        type: 'SERVICE_REQUEST_STATUS',
-        title: 'درخواست وارد بررسی اختلاف شد',
-        body: `مشتری درباره درخواست «${request.title}» اختلاف ثبت کرده است.`,
-        serviceRequestId: requestId,
-      });
+      try {
+        await this.notifications.createForUser({
+          userId: request.acceptedProviderProfile.userId,
+          category: 'WORK_UPDATES',
+          type: 'SERVICE_REQUEST_STATUS',
+          title: 'درخواست وارد بررسی اختلاف شد',
+          body: `مشتری درباره درخواست «${request.title}» اختلاف ثبت کرده است.`,
+          serviceRequestId: requestId,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Dispute notification failed for request ${requestId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
     }
     return { message: 'درخواست برای بررسی اختلاف ثبت شد' };
+  }
+
+  async updateDispute(
+    userId: string,
+    requestId: string,
+    reason: DisputeReason,
+    description: string,
+  ) {
+    if (reason === 'CUSTOMER_NON_PAYMENT') {
+      throw new BadRequestException(
+        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
+      );
+    }
+    const result = await this.prisma.serviceRequest.updateMany({
+      where: {
+        id: requestId,
+        customerId: userId,
+        status: 'DISPUTED',
+        disputeResolvedAt: null,
+      },
+      data: {
+        disputeReason: reason,
+        disputeDescription: description.trim(),
+        disputeUpdatedAt: new Date(),
+      },
+    });
+    if (!result.count) {
+      throw new ConflictException('اختلاف فعال برای ویرایش پیدا نشد');
+    }
+    return { message: 'شرح اختلاف به‌روزرسانی شد' };
+  }
+
+  async addDisputeMessage(userId: string, requestId: string, body: string) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        status: 'DISPUTED',
+        OR: [
+          { customerId: userId },
+          { acceptedProviderProfile: { userId } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        customerId: true,
+        acceptedProviderProfile: { select: { userId: true } },
+      },
+    });
+    if (!request) {
+      throw new NotFoundException('اختلاف فعال یا دسترسی شما پیدا نشد');
+    }
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.serviceRequestDisputeMessage.create({
+        data: {
+          serviceRequestId: request.id,
+          authorUserId: userId,
+          body: body.trim(),
+        },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          author: { select: { id: true, name: true, role: true } },
+        },
+      });
+      await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { disputeUpdatedAt: created.createdAt },
+      });
+      return created;
+    });
+
+    const recipientUserId =
+      userId === request.customerId
+        ? request.acceptedProviderProfile?.userId
+        : request.customerId;
+    if (recipientUserId) {
+      try {
+        await this.notifications.createForUser({
+          userId: recipientUserId,
+          category: 'WORK_UPDATES',
+          type: 'SERVICE_REQUEST_STATUS',
+          title: 'پیام جدید درباره‌ی اختلاف',
+          body: `پیام جدیدی درباره‌ی درخواست «${request.title}» ثبت شد.`,
+          serviceRequestId: requestId,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Dispute follow-up notification failed for request ${requestId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+    return message;
+  }
+
+  async addAdminDisputeMessage(requestId: string, adminUserId: string, body: string) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: { id: requestId, status: 'DISPUTED' },
+      select: {
+        id: true,
+        title: true,
+        customerId: true,
+        acceptedProviderProfile: { select: { userId: true } },
+      },
+    });
+    if (!request) throw new NotFoundException('اختلاف فعال پیدا نشد');
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.serviceRequestDisputeMessage.create({
+        data: {
+          serviceRequestId: request.id,
+          authorUserId: adminUserId,
+          body: body.trim(),
+        },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          author: { select: { id: true, name: true, role: true } },
+        },
+      });
+      await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { disputeUpdatedAt: created.createdAt },
+      });
+      return created;
+    });
+
+    const recipientIds = [
+      request.customerId,
+      ...(request.acceptedProviderProfile
+        ? [request.acceptedProviderProfile.userId]
+        : []),
+    ];
+    const notificationResults = await Promise.allSettled(
+      recipientIds.map((userId) =>
+        this.notifications.createForUser({
+          userId,
+          category: 'WORK_UPDATES',
+          type: 'SERVICE_REQUEST_STATUS',
+          title: 'پیام جدید از تیم رسیدگی',
+          body: `تیم رسیدگی درباره‌ی درخواست «${request.title}» پیام فرستاد.`,
+          serviceRequestId: request.id,
+        }),
+      ),
+    );
+    notificationResults.forEach((result) => {
+      if (result.status === 'rejected') {
+        this.logger.error(
+          `Admin dispute message notification failed for request ${request.id}`,
+          result.reason instanceof Error
+            ? result.reason.stack
+            : String(result.reason),
+        );
+      }
+    });
+    return message;
+  }
+
+  async getDisputeForAdmin(requestId: string) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: { id: requestId, status: 'DISPUTED' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        disputeReason: true,
+        disputeDescription: true,
+        disputeUpdatedAt: true,
+        createdAt: true,
+        customer: { select: { id: true, name: true, phone: true, email: true } },
+        acceptedProviderProfile: {
+          select: {
+            user: { select: { id: true, name: true, phone: true, email: true } },
+          },
+        },
+        payments: {
+          where: { status: 'PAID' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { amountToman: true },
+        },
+        disputeMessages: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, role: true } },
+          },
+        },
+      },
+    });
+    if (!request) throw new NotFoundException('اختلاف فعال پیدا نشد');
+    return {
+      id: request.id,
+      title: request.title,
+      requestDescription: request.description,
+      reason: request.disputeReason,
+      description: request.disputeDescription,
+      updatedAt: request.disputeUpdatedAt,
+      createdAt: request.createdAt,
+      amountToman: request.payments[0]?.amountToman ?? null,
+      customer: request.customer,
+      provider: request.acceptedProviderProfile?.user ?? null,
+      messages: request.disputeMessages,
+    };
   }
 
   async resolveDisputedRequestByAdmin(
@@ -1208,11 +1492,93 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: requestId,
         status: 'DISPUTED',
-        payments: { some: { status: 'PAID' } },
       },
-      select: { id: true, customerId: true },
+      select: {
+        id: true,
+        customerId: true,
+        payments: { where: { status: 'PAID' }, select: { id: true }, take: 1 },
+      },
     });
     if (!request) throw new NotFoundException('اختلاف فعال پیدا نشد');
+
+    if (!request.payments.length) {
+      const resolved = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${requestId} FOR UPDATE`;
+        const disputed = await tx.serviceRequest.findFirst({
+          where: {
+            id: requestId,
+            status: 'DISPUTED',
+            payments: { none: { status: 'PAID' } },
+          },
+          select: {
+            id: true,
+            title: true,
+            customerId: true,
+            acceptedProviderProfile: { select: { userId: true } },
+          },
+        });
+        if (!disputed) {
+          throw new ConflictException('وضعیت اختلاف تغییر کرده است');
+        }
+        const updated = await tx.serviceRequest.updateMany({
+          where: {
+            id: disputed.id,
+            status: 'DISPUTED',
+            payments: { none: { status: 'PAID' } },
+          },
+          data: {
+            status: 'CANCELLED',
+            customerConfirmationDeadline: null,
+            disputeResolution: resolution,
+            disputeResolutionNote: normalizedReason,
+            disputeResolvedById: adminUserId,
+            disputeResolvedAt: new Date(),
+          },
+        });
+        if (!updated.count) {
+          throw new ConflictException('وضعیت اختلاف تغییر کرده است');
+        }
+        return disputed;
+      });
+      const title =
+        resolution === 'PROVIDER'
+          ? 'اختلاف عدم پرداخت به نفع متخصص تعیین‌تکلیف شد'
+          : 'اختلاف عدم پرداخت به نفع مشتری تعیین‌تکلیف شد';
+      const recipients = [
+        resolved.customerId,
+        ...(resolved.acceptedProviderProfile
+          ? [resolved.acceptedProviderProfile.userId]
+          : []),
+      ];
+      const notificationResults = await Promise.allSettled(
+        recipients.map((userId) =>
+          this.notifications.createForUser({
+            userId,
+            category: 'WORK_UPDATES',
+            type: 'SERVICE_REQUEST_STATUS',
+            title,
+            body: `درخواست «${resolved.title}» پس از بررسی اختلاف لغو شد. نتیجه: ${normalizedReason}`,
+            serviceRequestId: resolved.id,
+          }),
+        ),
+      );
+      notificationResults.forEach((result) => {
+        if (result.status === 'rejected') {
+          this.logger.error(
+            `Unpaid dispute resolution notification failed for request ${resolved.id}`,
+            result.reason instanceof Error
+              ? result.reason.stack
+              : String(result.reason),
+          );
+        }
+      });
+      return {
+        message: title,
+        requestId: resolved.id,
+        resolution,
+        status: 'CANCELLED',
+      };
+    }
 
     if (resolution === 'PROVIDER') {
       return this.confirmCompletion(
@@ -1220,7 +1586,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         request.id,
         false,
         'DISPUTED',
-        { resolution, adminUserId, reason: normalizedReason },
+        {
+          resolution,
+          resolvedByUserId: adminUserId,
+          reason: normalizedReason,
+          actor: 'ADMIN',
+        },
       );
     }
 

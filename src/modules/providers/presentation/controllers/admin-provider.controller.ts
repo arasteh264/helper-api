@@ -22,13 +22,14 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 import { PROVIDER_DOCUMENT_REPOSITORY } from '../../application/documents/provider-document.repository.token';
 import type { ProviderDocumentRepository } from '../../application/documents/provider-document.repository';
 
-import { ProviderProfileDetailsResponseDto } from '../../application/dto/provider-profile-details-response.dto';
+import { ProviderPrivateProfileDetailsResponseDto } from '../../application/dto/provider-private-profile-details-response.dto';
 import { AdminPendingProvidersQueryDto } from '../../application/dto/admin-pending-providers-query.dto';
 import { GetProviderDocumentsForReviewUseCase } from '../../application/documents/get-provider-documents-for-review.use-case';
 import { ReviewProviderDto } from '../../application/dto/review-provider-document.dto';
 import { ReviewProviderDocumentUseCase } from '../../application/documents/review-provider-document.use-case';
 import { areRequiredDocumentsApproved } from '../../infrastructure/provider-documents.util';
 import { ReviewProviderDocumentDto } from '../../application/documents/review-provider-document.dto';
+import { GetAdminProviderInsightsUseCase } from '../../application/get-admin-provider-insights.use-case';
 
 @ApiTags('Admin - Providers')
 @ApiBearerAuth()
@@ -42,7 +43,14 @@ export class AdminProviderController {
     private readonly providerDocumentRepository: ProviderDocumentRepository,
     private readonly getProviderDocumentsForReviewUseCase: GetProviderDocumentsForReviewUseCase,
     private readonly reviewProviderDocumentUseCase: ReviewProviderDocumentUseCase,
+    private readonly getAdminProviderInsightsUseCase: GetAdminProviderInsightsUseCase,
   ) {}
+
+  @ApiOperation({ summary: 'Get provider registration and performance insights' })
+  @Get('analytics')
+  getAnalytics() {
+    return this.getAdminProviderInsightsUseCase.execute();
+  }
 
   @ApiOperation({ summary: 'List provider profiles by verification status' })
   @Get('pending')
@@ -64,7 +72,7 @@ export class AdminProviderController {
 
     return {
       items: items.map((provider) =>
-        ProviderProfileDetailsResponseDto.from(provider),
+        ProviderPrivateProfileDetailsResponseDto.from(provider),
       ),
       total,
     };
@@ -100,7 +108,7 @@ export class AdminProviderController {
       profile.userId,
     );
 
-    return ProviderProfileDetailsResponseDto.from(details!);
+    return ProviderPrivateProfileDetailsResponseDto.from(details!);
   }
 
   @ApiOperation({ summary: 'Get all verification documents of a provider' })

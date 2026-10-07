@@ -7,6 +7,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import { normalizeSheba } from '../../domain/utils/sheba.util';
 
 export class UpsertBankAccountDto {
   @ApiProperty({ description: 'نام صاحب حساب' })
@@ -15,11 +16,13 @@ export class UpsertBankAccountDto {
   @MaxLength(100)
   holderName!: string;
 
-  @ApiProperty({ description: 'شماره شبا: IR + ۲۴ رقم (فاصله‌ها حذف می‌شن)' })
+  @ApiProperty({ description: 'شماره شبا: ۲۴ رقم، با یا بدون پیشوند IR' })
   @Transform(({ value }) =>
-    typeof value === 'string' ? value.replace(/\s+/g, '').toUpperCase() : value,
+    typeof value === 'string' ? normalizeSheba(value) : value,
   )
-  @Matches(/^IR\d{24}$/, { message: 'sheba must be IR followed by 24 digits' })
+  @Matches(/^(?:IR)?\d{24}$/, {
+    message: 'شماره شبا باید ۲۴ رقم داشته باشد؛ پیشوند IR اختیاری است',
+  })
   sheba!: string;
 
   @ApiPropertyOptional()

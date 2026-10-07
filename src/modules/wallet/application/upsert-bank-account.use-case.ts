@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import type { WalletRepository } from '../domain/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from '../domain/repositories/wallet.repository.token';
-import { isValidSheba } from '../domain/utils/sheba.util';
+import { isValidSheba, normalizeSheba } from '../domain/utils/sheba.util';
 
 @Injectable()
 export class UpsertBankAccountUseCase {
@@ -45,7 +45,7 @@ export class UpsertBankAccountUseCase {
     dto: { holderName: string; sheba: string; bankName?: string },
   ) {
     if (!isValidSheba(dto.sheba)) {
-      throw new BadRequestException('Invalid Sheba number');
+      throw new BadRequestException('شماره شبا معتبر نیست');
     }
 
     const account = await save();
@@ -61,7 +61,7 @@ export class UpsertBankAccountUseCase {
   }) {
     return {
       holderName: dto.holderName.trim(),
-      sheba: dto.sheba,
+      sheba: normalizeSheba(dto.sheba),
       bankName: dto.bankName?.trim() || null,
     };
   }

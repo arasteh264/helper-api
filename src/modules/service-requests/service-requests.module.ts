@@ -12,6 +12,7 @@ import { AdminListServiceRequestsUseCase } from './application/admin-list-servic
 import { ListMyServiceRequestsUseCase } from '../customers/application/list-my-service-requests.use-case';
 import { MatchingModule } from '../matching/matching.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { AdminServiceRequestActionsUseCases } from './application/admin-service-request-actions.use-cases';
 
 @Module({
   imports: [ProvidersModule, MatchingModule, PaymentsModule],
@@ -25,6 +26,7 @@ import { PaymentsModule } from '../payments/payments.module';
     AddSkillToRequestUseCase,
     UploadServiceRequestImageUseCase,
     AdminListServiceRequestsUseCase,
+    AdminServiceRequestActionsUseCases,
     ListMyServiceRequestsUseCase,
     {
       provide: SERVICE_REQUEST_REPOSITORY,

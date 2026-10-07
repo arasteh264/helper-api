@@ -1,6 +1,6 @@
 // application/match-providers-for-request.use-case.ts
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { INITIAL_BATCH_SIZE, MAX_RADIUS_KM } from '../matching.constants';
+import { INITIAL_BATCH_SIZE } from '../matching.constants';
 import { MATCHING_REPOSITORY } from '../domain/matching.repository.token';
 import type { MatchingRepository } from '../domain/matching.repository';
 import { rankCandidates } from '../domain/provider-ranking';
@@ -27,7 +27,6 @@ export class MatchProvidersForRequestUseCase {
     );
     const selected = rankCandidates(criteria, candidates, {
       batchSize: INITIAL_BATCH_SIZE,
-      maxRadiusKm: MAX_RADIUS_KM,
     });
 
     await this.repository.createInvitations(requestId, selected);

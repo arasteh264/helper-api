@@ -1,7 +1,13 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { WALLET_REPOSITORY } from '../domain/repositories/wallet.repository.token';
 import type { WalletRepository } from '../domain/repositories/wallet.repository';
 import type { WalletTransactionType } from '../domain/entities/wallet-transaction-type';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class GetPlatformAccountingSummaryUseCase {
@@ -33,12 +39,15 @@ export class ListPayoutRequestsUseCase {
 
 @Injectable()
 export class ReviewPayoutRequestUseCase {
+  private readonly logger = new Logger(ReviewPayoutRequestUseCase.name);
+
   constructor(
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
+    private readonly notifications: NotificationsService,
   ) {}
 
-  execute(
+  async execute(
     payoutRequestId: string,
     adminUserId: string,
     input: {
@@ -53,13 +62,35 @@ export class ReviewPayoutRequestUseCase {
     if (input.decision === 'REJECTED' && !input.rejectReason?.trim()) {
       throw new BadRequestException('دلیل رد درخواست برداشت الزامی است');
     }
-    return this.walletRepository.reviewPayoutRequest({
+    const payout = await this.walletRepository.reviewPayoutRequest({
       payoutRequestId,
       adminUserId,
       ...input,
       referenceCode: input.referenceCode?.trim(),
       rejectReason: input.rejectReason?.trim(),
     });
+    if (input.decision === 'PAID' && payout.status === 'PAID') {
+      const referenceCode = payout.referenceCode ?? input.referenceCode?.trim();
+      if (!referenceCode) {
+        this.logger.error(
+          `Provider payout ${payout.id} was marked paid without a reference code`,
+        );
+      } else {
+        try {
+          await this.notifications.sendProviderPayoutCompletedEmail(
+            payout.providerProfileId,
+            payout.amount,
+            referenceCode,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Provider payout email could not be sent for payout ${payout.id}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      }
+    }
+    return payout;
   }
 }
 

@@ -1,7 +1,7 @@
 import {
   ProviderProfile,
+  ProviderAddressType,
   ProviderVerificationStatus,
-  ProviderWorkingHourSlot,
 } from '../entities/provider-profile.entity';
 
 export interface ProviderProfileDetails {
@@ -17,6 +17,9 @@ export interface ProviderProfileDetails {
   avatarUrl: string | null;
   serviceAreaLatitude: number | null;
   serviceAreaLongitude: number | null;
+  serviceAreaRadiusKm: number;
+  providerAddress: string | null;
+  providerAddressType: ProviderAddressType;
   createdAt: Date;
   updatedAt: Date;
   user: { name: string; email: string; phone: string };
@@ -29,7 +32,21 @@ export interface ProviderProfileDetails {
     groupId: string;
     groupName: string;
   }[];
-  workingHours: ProviderWorkingHourSlot[];
+}
+
+export interface AdminProviderInsights {
+  registrationDates: Date[];
+  topRated: {
+    id: string;
+    name: string;
+    rating: number;
+    skills: string[];
+  }[];
+  topCompletedJobs: {
+    id: string;
+    name: string;
+    completedJobs: number;
+  }[];
 }
 
 export interface ProviderProfileRepository {
@@ -64,4 +81,10 @@ export interface ProviderProfileRepository {
   findAllApproved(): Promise<ProviderProfile[]>;
 
   findAllApprovedDetails(): Promise<ProviderProfileDetails[]>;
+
+  getAdminInsights(input: {
+    createdFrom: Date;
+    createdTo: Date;
+    limit: number;
+  }): Promise<AdminProviderInsights>;
 }

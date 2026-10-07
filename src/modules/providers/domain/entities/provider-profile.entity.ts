@@ -1,11 +1,5 @@
 export type ProviderVerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-export interface ProviderWorkingHourSlot {
-  dayOfWeek: number;
-  isActive: boolean;
-  startTime: string;
-  endTime: string;
-}
+export type ProviderAddressType = 'HOME' | 'BUSINESS';
 
 export class ProviderProfile {
   private constructor(
@@ -19,13 +13,15 @@ export class ProviderProfile {
     private _verifiedAt: Date | null,
     private _isAvailable: boolean,
     private _skillIds: string[],
-    private _workingHours: ProviderWorkingHourSlot[],
     private readonly _createdAt: Date,
     private _updatedAt: Date,
     private _avatarUrl: string | null,
     private _avatarPublicId: string | null,
     private _serviceAreaLatitude: number | null,
     private _serviceAreaLongitude: number | null,
+    private _serviceAreaRadiusKm: number,
+    private _providerAddress: string | null,
+    private _providerAddressType: ProviderAddressType,
   ) {}
 
   static create(userId: string, bio: string | null): ProviderProfile {
@@ -42,13 +38,15 @@ export class ProviderProfile {
       null,
       false,
       [],
-      [],
       now,
       now,
       null,
       null,
       null,
       null,
+      10,
+      null,
+      'HOME',
     );
   }
 
@@ -63,13 +61,15 @@ export class ProviderProfile {
     verifiedAt: Date | null,
     isAvailable: boolean,
     skillIds: string[],
-    workingHours: ProviderWorkingHourSlot[],
     createdAt: Date,
     updatedAt: Date,
     avatarUrl: string | null = null,
     avatarPublicId: string | null = null,
     serviceAreaLatitude: number | null = null,
     serviceAreaLongitude: number | null = null,
+    serviceAreaRadiusKm = 10,
+    providerAddress: string | null = null,
+    providerAddressType: ProviderAddressType = 'HOME',
   ): ProviderProfile {
     return new ProviderProfile(
       id,
@@ -82,13 +82,15 @@ export class ProviderProfile {
       verifiedAt,
       isAvailable,
       skillIds,
-      workingHours,
       createdAt,
       updatedAt,
       avatarUrl,
       avatarPublicId,
       serviceAreaLatitude,
       serviceAreaLongitude,
+      serviceAreaRadiusKm,
+      providerAddress,
+      providerAddressType,
     );
   }
 
@@ -122,9 +124,6 @@ export class ProviderProfile {
   get skillIds(): string[] {
     return this._skillIds;
   }
-  get workingHours(): ProviderWorkingHourSlot[] {
-    return this._workingHours;
-  }
   get createdAt(): Date {
     return this._createdAt;
   }
@@ -143,6 +142,15 @@ export class ProviderProfile {
   get serviceAreaLongitude(): number | null {
     return this._serviceAreaLongitude;
   }
+  get serviceAreaRadiusKm(): number {
+    return this._serviceAreaRadiusKm;
+  }
+  get providerAddress(): string | null {
+    return this._providerAddress;
+  }
+  get providerAddressType(): ProviderAddressType {
+    return this._providerAddressType;
+  }
 
   updateBio(bio: string | null): void {
     this._bio = bio;
@@ -154,19 +162,23 @@ export class ProviderProfile {
     this._updatedAt = new Date();
   }
 
-  setServiceArea(latitude: number | null, longitude: number | null): void {
+  setServiceArea(
+    latitude: number | null,
+    longitude: number | null,
+    radiusKm: number,
+  ): void {
     this._serviceAreaLatitude = latitude;
     this._serviceAreaLongitude = longitude;
+    this._serviceAreaRadiusKm = radiusKm;
     this._updatedAt = new Date();
   }
 
-  setWorkingHours(hours: ProviderWorkingHourSlot[]): void {
-    this._workingHours = hours.map((h) => ({
-      dayOfWeek: h.dayOfWeek,
-      isActive: h.isActive,
-      startTime: h.startTime,
-      endTime: h.endTime,
-    }));
+  setProviderAddress(
+    address: string | null,
+    addressType: ProviderAddressType,
+  ): void {
+    this._providerAddress = address;
+    this._providerAddressType = addressType;
     this._updatedAt = new Date();
   }
 

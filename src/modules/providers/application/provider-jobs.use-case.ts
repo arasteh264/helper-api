@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { PrismaService } from '../../../infrastructure/database/prisma.service';
@@ -12,6 +13,8 @@ import { NotificationsService } from '../../notifications/notifications.service'
 
 @Injectable()
 export class ProviderJobsUseCase {
+  private readonly logger = new Logger(ProviderJobsUseCase.name);
+
   constructor(
     @Inject(PRISMA_SERVICE) private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -33,6 +36,20 @@ export class ProviderJobsUseCase {
               specialty: { select: { name: true } },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
+              payments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { status: true },
+              },
+              disputeMessages: {
+                orderBy: { createdAt: 'asc' },
+                select: {
+                  id: true,
+                  body: true,
+                  createdAt: true,
+                  author: { select: { id: true, name: true, role: true } },
+                },
+              },
             },
           },
         },
@@ -58,6 +75,20 @@ export class ProviderJobsUseCase {
           specialty: { select: { name: true } },
           skills: { include: { skill: true } },
           images: { select: { url: true } },
+          payments: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { status: true },
+          },
+          disputeMessages: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              body: true,
+              createdAt: true,
+              author: { select: { id: true, name: true, role: true } },
+            },
+          },
         },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -69,6 +100,11 @@ export class ProviderJobsUseCase {
               specialty: { select: { name: true } },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
+              payments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { status: true },
+              },
             },
           },
         },
@@ -99,7 +135,7 @@ export class ProviderJobsUseCase {
     const customers = customerIds.length
       ? await this.prisma.user.findMany({
           where: { id: { in: customerIds } },
-          select: { id: true, name: true },
+          select: { id: true, name: true, phone: true },
         })
       : [];
     const customerById = new Map(
@@ -112,6 +148,7 @@ export class ProviderJobsUseCase {
         viewStatus === 'accepted' ||
         viewStatus === 'in_progress' ||
         viewStatus === 'awaiting_confirmation';
+      const paymentStatus = request.payments[0]?.status ?? 'PENDING';
       return {
         id: request.id,
         title: request.title,
@@ -119,6 +156,8 @@ export class ProviderJobsUseCase {
           request.specialty?.name ??
           (request.skills.map((item) => item.skill.name).join('، ') || 'عمومی'),
         customerName: customer?.name ?? 'مشتری',
+        customerPhone: paymentStatus === 'PAID' ? customer?.phone : undefined,
+        paymentStatus,
         address: canSeeAddress
           ? (request.address ?? 'آدرس ثبت نشده است')
           : 'آدرس پس از پرداخت نمایش داده می‌شود',
@@ -135,6 +174,25 @@ export class ProviderJobsUseCase {
         status: viewStatus,
         note: request.description,
         images: request.images.map((image) => image.url),
+        ...(request.disputeReason
+          ? {
+              disputeReason: request.disputeReason,
+              disputeDescription: request.disputeDescription,
+              disputeResolved: Boolean(request.disputeResolvedAt),
+              disputeResolution: request.disputeResolution,
+              disputeResolutionNote: request.disputeResolutionNote,
+              disputeMessages: ('disputeMessages' in request
+                ? request.disputeMessages
+                : []
+              ).map((message) => ({
+                id: message.id,
+                body: message.body,
+                createdAt: message.createdAt.toISOString(),
+                authorName: message.author.name,
+                authorRole: message.author.role,
+              })),
+            }
+          : {}),
       };
     });
   }
@@ -343,6 +401,103 @@ export class ProviderJobsUseCase {
       serviceRequestId: requestId,
     });
     return { message };
+  }
+
+  async addDisputeMessage(userId: string, requestId: string, body: string) {
+    const profile = await this.getProfile(userId);
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        acceptedProviderProfileId: profile.id,
+        status: 'DISPUTED',
+      },
+      select: { id: true, title: true, customerId: true },
+    });
+    if (!request) {
+      throw new NotFoundException('اختلاف فعالی برای این درخواست پیدا نشد');
+    }
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.serviceRequestDisputeMessage.create({
+        data: {
+          serviceRequestId: request.id,
+          authorUserId: userId,
+          body: body.trim(),
+        },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          author: { select: { id: true, name: true, role: true } },
+        },
+      });
+      await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { disputeUpdatedAt: created.createdAt },
+      });
+      return created;
+    });
+
+    try {
+      await this.notifications.createForUser({
+        userId: request.customerId,
+        category: 'WORK_UPDATES',
+        type: 'SERVICE_REQUEST_STATUS',
+        title: 'متخصص درباره‌ی اختلاف پیام فرستاد',
+        body: `پیام جدیدی درباره‌ی درخواست «${request.title}» ثبت شد.`,
+        serviceRequestId: request.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Dispute reply notification failed for request ${request.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+    return message;
+  }
+
+  async raiseNonPaymentDispute(userId: string, requestId: string, description: string) {
+    const profile = await this.getApprovedProfile(userId);
+    const result = await this.prisma.serviceRequest.updateMany({
+      where: {
+        id: requestId,
+        acceptedProviderProfileId: profile.id,
+        status: 'CUSTOMER_CONFIRMATION_PENDING',
+        payments: { none: { status: 'PAID' } },
+      },
+      data: {
+        status: 'DISPUTED',
+        customerConfirmationDeadline: null,
+        disputeReason: 'CUSTOMER_NON_PAYMENT',
+        disputeDescription: description.trim(),
+        disputeUpdatedAt: new Date(),
+      },
+    });
+    if (!result.count) {
+      throw new ConflictException(
+        'درخواست در وضعیت انتظار پرداخت برای این متخصص نیست',
+      );
+    }
+    const request = await this.prisma.serviceRequest.findUniqueOrThrow({
+      where: { id: requestId },
+      select: { title: true, customerId: true },
+    });
+    try {
+      await this.notifications.createForUser({
+        userId: request.customerId,
+        category: 'WORK_UPDATES',
+        type: 'SERVICE_REQUEST_STATUS',
+        title: 'متخصص درباره‌ی پرداخت اختلاف ثبت کرد',
+        body: `متخصص درباره‌ی پرداخت درخواست «${request.title}» اختلاف ثبت کرده است.`,
+        serviceRequestId: requestId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Non-payment dispute notification failed for request ${requestId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+    return { message: 'اختلاف پرداخت برای بررسی ثبت شد' };
   }
 
   private async getApprovedProfile(userId: string) {

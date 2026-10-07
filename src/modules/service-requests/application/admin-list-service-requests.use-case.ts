@@ -15,10 +15,12 @@ export class AdminListServiceRequestsUseCase {
   ) {}
 
   async execute(filter: FindAllServiceRequestsFilter) {
-    const { items, total } = await this.repository.findAll(filter);
+    const { items, total } = await this.repository.findAllAdmin(filter);
 
     return buildPaginatedResult(
-      items.map((r) => ServiceRequestResponseDto.fromEntity(r)),
+      items.map(({ request, customer, skills }) =>
+        ServiceRequestResponseDto.fromEntity(request, customer, skills),
+      ),
       total,
     );
   }

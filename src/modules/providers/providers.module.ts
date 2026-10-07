@@ -35,6 +35,7 @@ import { GetMyDocumentsUseCase } from './application/documents/get-my-documents.
 import { ReviewProviderDocumentUseCase } from './application/documents/review-provider-document.use-case';
 import { SetProviderSpecialtiesUseCase } from './application/specialties/set-provider-specialties.use-case';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { GetAdminProviderInsightsUseCase } from './application/get-admin-provider-insights.use-case';
 
 @Module({
   imports: [StorageModule, UsersModule, NotificationsModule],
@@ -64,6 +65,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ReviewProviderDocumentUseCase,
     SetProviderSpecialtiesUseCase,
     ProviderJobsUseCase,
+    GetAdminProviderInsightsUseCase,
     {
       provide: PROVIDER_PROFILE_REPOSITORY,
       useClass: PrismaProviderProfileRepository,
