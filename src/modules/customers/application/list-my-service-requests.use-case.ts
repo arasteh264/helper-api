@@ -49,13 +49,22 @@ export class ListMyServiceRequestsUseCase {
             specialty: { select: { name: true } },
             images: true,
             acceptedProviderProfile: {
-              include: { user: { select: { name: true } } },
+              include: { user: { select: { name: true, phone: true } } },
             },
             review: true,
             payments: {
               where: { status: 'PAID' },
               select: { id: true },
               take: 1,
+            },
+            disputeMessages: {
+              orderBy: { createdAt: 'asc' },
+              select: {
+                id: true,
+                body: true,
+                createdAt: true,
+                author: { select: { id: true, name: true, role: true } },
+              },
             },
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

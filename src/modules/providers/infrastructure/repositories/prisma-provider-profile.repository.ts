@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import { ProviderProfile } from '../../domain/entities/provider-profile.entity';
 import type {
+  AdminProviderInsights,
   ProviderProfileRepository,
   ProviderProfileDetails,
 } from '../../domain/repositories/provider-profile.repository';
@@ -26,6 +27,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         avatarPublicId: profile.avatarPublicId,
         serviceAreaLatitude: profile.serviceAreaLatitude,
         serviceAreaLongitude: profile.serviceAreaLongitude,
+        serviceAreaRadiusKm: profile.serviceAreaRadiusKm,
+        providerAddress: profile.providerAddress,
+        providerAddressType: profile.providerAddressType,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt,
       },
@@ -48,6 +52,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           avatarPublicId: profile.avatarPublicId,
           serviceAreaLatitude: profile.serviceAreaLatitude,
           serviceAreaLongitude: profile.serviceAreaLongitude,
+          serviceAreaRadiusKm: profile.serviceAreaRadiusKm,
+          providerAddress: profile.providerAddress,
+          providerAddressType: profile.providerAddressType,
           updatedAt: profile.updatedAt,
         },
       }),
@@ -61,29 +68,13 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         })),
         skipDuplicates: true,
       }),
-      this.prisma.providerWorkingHour.deleteMany({
-        where: { providerProfileId: profile.id },
-      }),
-      ...(profile.workingHours.length
-        ? [
-            this.prisma.providerWorkingHour.createMany({
-              data: profile.workingHours.map((hour) => ({
-                providerProfileId: profile.id,
-                dayOfWeek: hour.dayOfWeek,
-                isActive: hour.isActive,
-                startTime: hour.startTime,
-                endTime: hour.endTime,
-              })),
-            }),
-          ]
-        : []),
     ]);
   }
 
   async findByUserId(userId: string): Promise<ProviderProfile | null> {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { userId },
-      include: { skills: true, workingHours: true },
+      include: { skills: true },
     });
 
     return profile ? this.toDomain(profile) : null;
@@ -127,7 +118,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       },
       include: {
         skills: true,
-        workingHours: true,
       },
     });
 
@@ -136,7 +126,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
   async findById(id: string): Promise<ProviderProfile | null> {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { id },
-      include: { skills: true, workingHours: true },
+      include: { skills: true },
     });
 
     return profile ? this.toDomain(profile) : null;
@@ -151,7 +141,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         user: { select: { name: true, email: true, phone: true } },
         skills: { include: { skill: true } },
         specialties: { include: { specialty: { include: { group: true } } } },
-        workingHours: true,
       },
     });
 
@@ -170,6 +159,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       avatarUrl: p.avatarUrl,
       serviceAreaLatitude: p.serviceAreaLatitude,
       serviceAreaLongitude: p.serviceAreaLongitude,
+      serviceAreaRadiusKm: p.serviceAreaRadiusKm,
+      providerAddress: p.providerAddress,
+      providerAddressType: p.providerAddressType,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       user: p.user,
@@ -182,12 +174,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         groupId: specialty.groupId,
         groupName: specialty.group.name,
       })),
-      workingHours: p.workingHours.map((hour) => ({
-        dayOfWeek: hour.dayOfWeek,
-        isActive: hour.isActive,
-        startTime: hour.startTime,
-        endTime: hour.endTime,
-      })),
     };
   }
 
@@ -198,7 +184,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         isAvailable: true,
         skills: { some: { skillId: { in: skillIds } } },
       },
-      include: { skills: true, workingHours: true },
+      include: { skills: true },
     });
 
     return rows.map((row) => this.toDomain(row));
@@ -209,7 +195,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
   ): Promise<ProviderProfile[]> {
     const rows = await this.prisma.providerProfile.findMany({
       where: { verificationStatus: status as any },
-      include: { skills: true, workingHours: true },
+      include: { skills: true },
     });
 
     return rows.map((row) => this.toDomain(row));
@@ -254,6 +240,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
               },
             },
           }
+
         : {}),
     };
 
@@ -267,7 +254,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           user: { select: { name: true, email: true, phone: true } },
           skills: { include: { skill: true } },
           specialties: { include: { specialty: { include: { group: true } } } },
-          workingHours: true,
         },
       }),
       this.prisma.providerProfile.count({ where }),
@@ -287,6 +273,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         avatarUrl: profile.avatarUrl,
         serviceAreaLatitude: profile.serviceAreaLatitude,
         serviceAreaLongitude: profile.serviceAreaLongitude,
+        serviceAreaRadiusKm: profile.serviceAreaRadiusKm,
+        providerAddress: profile.providerAddress,
+        providerAddressType: profile.providerAddressType,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt,
         user: profile.user,
@@ -302,14 +291,82 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           groupId: specialty.groupId,
           groupName: specialty.group.name,
         })),
-        workingHours: profile.workingHours.map((hour) => ({
-          dayOfWeek: hour.dayOfWeek,
-          isActive: hour.isActive,
-          startTime: hour.startTime,
-          endTime: hour.endTime,
-        })),
       })),
       total,
+    };
+  }
+
+  async getAdminInsights(input: {
+    createdFrom: Date;
+    createdTo: Date;
+    limit: number;
+  }): Promise<AdminProviderInsights> {
+    const [registrations, topRated, completedGroups] = await Promise.all([
+      this.prisma.providerProfile.findMany({
+        where: { createdAt: { gte: input.createdFrom, lte: input.createdTo } },
+        select: { createdAt: true },
+      }),
+      this.prisma.providerProfile.findMany({
+        where: { verificationStatus: 'APPROVED', rating: { gt: 0 } },
+        select: {
+          id: true,
+          rating: true,
+          user: { select: { name: true } },
+          skills: { select: { skill: { select: { name: true } } } },
+        },
+        orderBy: [{ rating: 'desc' }, { createdAt: 'asc' }],
+        take: input.limit,
+      }),
+      this.prisma.serviceRequest.groupBy({
+        by: ['acceptedProviderProfileId'],
+        where: {
+          status: 'COMPLETED',
+          acceptedProviderProfileId: { not: null },
+          acceptedProviderProfile: {
+            is: { verificationStatus: 'APPROVED' },
+          },
+        },
+        _count: { id: true },
+        orderBy: [
+          { _count: { id: 'desc' } },
+          { acceptedProviderProfileId: 'asc' },
+        ],
+        take: input.limit,
+      }),
+    ]);
+
+    const completedCounts = new Map(
+      completedGroups.flatMap((group) =>
+        group.acceptedProviderProfileId
+          ? [[group.acceptedProviderProfileId, group._count.id] as const]
+          : [],
+      ),
+    );
+    const completedProviderIds = [...completedCounts.keys()];
+    const completedProviders = completedProviderIds.length
+      ? await this.prisma.providerProfile.findMany({
+          where: { id: { in: completedProviderIds } },
+          select: { id: true, user: { select: { name: true } } },
+        })
+      : [];
+    const namesById = new Map(
+      completedProviders.map((provider) => [provider.id, provider.user.name]),
+    );
+
+    return {
+      registrationDates: registrations.map((provider) => provider.createdAt),
+      topRated: topRated.map((provider) => ({
+        id: provider.id,
+        name: provider.user.name,
+        rating: provider.rating,
+        skills: provider.skills.map(({ skill }) => skill.name),
+      })),
+      topCompletedJobs: completedProviderIds.flatMap((id) => {
+        const name = namesById.get(id);
+        return name
+          ? [{ id, name, completedJobs: completedCounts.get(id) ?? 0 }]
+          : [];
+      }),
     };
   }
 
@@ -332,7 +389,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           },
         },
         specialties: { include: { specialty: { include: { group: true } } } },
-        workingHours: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -352,6 +408,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       avatarUrl: p.avatarUrl,
       serviceAreaLatitude: p.serviceAreaLatitude,
       serviceAreaLongitude: p.serviceAreaLongitude,
+      serviceAreaRadiusKm: p.serviceAreaRadiusKm,
+      providerAddress: p.providerAddress,
+      providerAddressType: p.providerAddressType,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
 
@@ -371,12 +430,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         groupName: specialty.group.name,
       })),
 
-      workingHours: p.workingHours.map((hour) => ({
-        dayOfWeek: hour.dayOfWeek,
-        isActive: hour.isActive,
-        startTime: hour.startTime,
-        endTime: hour.endTime,
-      })),
     }));
   }
 
@@ -394,15 +447,12 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     avatarPublicId: string | null;
     serviceAreaLatitude: number | null;
     serviceAreaLongitude: number | null;
+    serviceAreaRadiusKm: number;
+    providerAddress: string | null;
+    providerAddressType: 'HOME' | 'BUSINESS';
     createdAt: Date;
     updatedAt: Date;
     skills: { skillId: string }[];
-    workingHours: {
-      dayOfWeek: number;
-      isActive: boolean;
-      startTime: string;
-      endTime: string;
-    }[];
   }): ProviderProfile {
     return ProviderProfile.reconstitute(
       profile.id,
@@ -415,18 +465,15 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       profile.verifiedAt,
       profile.isAvailable,
       profile.skills.map((s) => s.skillId),
-      profile.workingHours.map((hour) => ({
-        dayOfWeek: hour.dayOfWeek,
-        isActive: hour.isActive,
-        startTime: hour.startTime,
-        endTime: hour.endTime,
-      })),
       profile.createdAt,
       profile.updatedAt,
       profile.avatarUrl,
       profile.avatarPublicId,
       profile.serviceAreaLatitude,
       profile.serviceAreaLongitude,
+      profile.serviceAreaRadiusKm,
+      profile.providerAddress,
+      profile.providerAddressType,
     );
   }
 }

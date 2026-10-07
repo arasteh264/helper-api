@@ -8,22 +8,26 @@ import type {
 export function rankCandidates(
   criteria: Pick<MatchingCriteria, 'latitude' | 'longitude'>,
   candidates: ProviderCandidate[],
-  options: { batchSize: number; maxRadiusKm: number },
+  options: { batchSize: number },
 ): { providerProfileId: string; distanceKm: number }[] {
   return candidates
     .map((c) => ({
       providerProfileId: c.providerProfileId,
-      distanceKm:
-        Math.round(
-          haversineKm(
-            criteria.latitude,
-            criteria.longitude,
-            c.latitude,
-            c.longitude,
-          ) * 10,
-        ) / 10,
+      serviceAreaRadiusKm: c.serviceAreaRadiusKm,
+      distanceKm: haversineKm(
+        criteria.latitude,
+        criteria.longitude,
+        c.latitude,
+        c.longitude,
+      ),
     }))
-    .filter((c) => c.distanceKm <= options.maxRadiusKm)
+    .filter(
+      (c) => c.distanceKm <= c.serviceAreaRadiusKm,
+    )
     .sort((a, b) => a.distanceKm - b.distanceKm)
-    .slice(0, options.batchSize);
+    .slice(0, options.batchSize)
+    .map(({ providerProfileId, distanceKm }) => ({
+      providerProfileId,
+      distanceKm: Math.round(distanceKm * 10) / 10,
+    }));
 }

@@ -40,20 +40,6 @@ class ProviderSpecialtyDto {
   groupName!: string;
 }
 
-class ProviderWorkingHourDto {
-  @ApiProperty()
-  dayOfWeek!: number;
-
-  @ApiProperty()
-  isActive!: boolean;
-
-  @ApiProperty()
-  startTime!: string;
-
-  @ApiProperty()
-  endTime!: string;
-}
-
 export class ProviderProfileDetailsResponseDto {
   @ApiProperty()
   id!: string;
@@ -88,6 +74,9 @@ export class ProviderProfileDetailsResponseDto {
   @ApiProperty({ nullable: true, type: Number })
   serviceAreaLongitude!: number | null;
 
+  @ApiProperty({ minimum: 1, maximum: 200 })
+  serviceAreaRadiusKm!: number;
+
   @ApiProperty({ type: ProviderUserDto })
   user!: ProviderUserDto;
 
@@ -96,9 +85,6 @@ export class ProviderProfileDetailsResponseDto {
 
   @ApiProperty({ type: [ProviderSpecialtyDto] })
   specialties!: ProviderSpecialtyDto[];
-
-  @ApiProperty({ type: [ProviderWorkingHourDto] })
-  workingHours!: ProviderWorkingHourDto[];
 
   @ApiProperty()
   createdAt!: Date;
@@ -119,10 +105,10 @@ export class ProviderProfileDetailsResponseDto {
       avatarUrl: d.avatarUrl,
       serviceAreaLatitude: d.serviceAreaLatitude,
       serviceAreaLongitude: d.serviceAreaLongitude,
+      serviceAreaRadiusKm: d.serviceAreaRadiusKm,
       user: d.user,
       skills: d.skills,
       specialties: d.specialties,
-      workingHours: d.workingHours,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     };

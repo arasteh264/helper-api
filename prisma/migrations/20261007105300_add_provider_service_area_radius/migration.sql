@@ -1,0 +1,2 @@
+ALTER TABLE "ProviderProfile"
+ADD COLUMN "serviceAreaRadiusKm" DOUBLE PRECISION NOT NULL DEFAULT 10;

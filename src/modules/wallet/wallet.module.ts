@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ProviderWalletController } from './presentation/controllers/provider-wallet.controller';
 import { AdminWalletController } from './presentation/controllers/admin-wallet.controller';
 import { GetWalletSummaryUseCase } from './application/get-wallet-summary.use-case';
@@ -22,6 +23,7 @@ import {
 } from './application/admin-wallet-accounting.use-cases';
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [ProviderWalletController, AdminWalletController],
   providers: [
     GetWalletSummaryUseCase,

@@ -192,6 +192,68 @@ export class NotificationsService {
     return notification;
   }
 
+  async sendProviderJobConfirmationEmail(
+    providerUserId: string,
+    requestTitle: string,
+    requestId: string,
+  ) {
+    const provider = await this.prisma.user.findUnique({
+      where: { id: providerUserId },
+      select: { name: true, email: true },
+    });
+    if (!provider) {
+      throw new NotFoundException('پروفایل متخصص برای ارسال ایمیل پیدا نشد');
+    }
+
+    const safeName = this.escapeHtml(provider.name);
+    const safeTitle = this.escapeHtml(requestTitle);
+    const safeRequestId = this.escapeHtml(requestId);
+    const portalUrl = this.getFrontendUrl('/provider/jobs');
+    await this.emailSender.send(
+      provider.email,
+      'پرداخت مشتری برای درخواست شما تأیید شد',
+      `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:2">
+        <h2>سلام ${safeName}</h2>
+        <p>مشتری مبلغ درخواست «${safeTitle}» را با موفقیت پرداخت کرده است.</p>
+        <p>برای ادامه‌ی کار و هماهنگی با مشتری، وارد سایت هلپر و پنل متخصص شوید.</p>
+        ${portalUrl ? `<p><a href="${this.escapeHtml(portalUrl)}">ورود به پنل متخصص</a></p>` : ''}
+        <p>کد درخواست: ${safeRequestId}</p>
+        <p>هلپر</p>
+      </div>`,
+    );
+  }
+
+  async sendProviderPayoutCompletedEmail(
+    providerProfileId: string,
+    amountToman: number,
+    referenceCode: string,
+  ) {
+    const provider = await this.prisma.providerProfile.findUnique({
+      where: { id: providerProfileId },
+      select: { user: { select: { name: true, email: true } } },
+    });
+    if (!provider) {
+      throw new NotFoundException('پروفایل متخصص برای ارسال ایمیل پیدا نشد');
+    }
+
+    const safeName = this.escapeHtml(provider.user.name);
+    const safeAmount = amountToman.toLocaleString('fa-IR');
+    const safeReference = this.escapeHtml(referenceCode);
+    const portalUrl = this.getFrontendUrl('/provider/finance');
+    await this.emailSender.send(
+      provider.user.email,
+      'واریز درآمد هلپر برای شما انجام شد',
+      `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:2">
+        <h2>سلام ${safeName}</h2>
+        <p>مبلغ ${safeAmount} تومان به حساب بانکی ثبت‌شده‌ی شما واریز شد.</p>
+        <p>کد پیگیری واریز: ${safeReference}</p>
+        <p>برای دیدن جزئیات، وارد پنل مالی متخصص در سایت هلپر شوید.</p>
+        ${portalUrl ? `<p><a href="${this.escapeHtml(portalUrl)}">مشاهده‌ی پنل مالی</a></p>` : ''}
+        <p>هلپر</p>
+      </div>`,
+    );
+  }
+
   async listForUser(userId: string, cursor: string | undefined, limit: number) {
     const safeLimit = Math.min(100, Math.max(1, limit));
     const where = {
@@ -267,5 +329,10 @@ export class NotificationsService {
           "'": '&#39;',
         })[character]!,
     );
+  }
+
+  private getFrontendUrl(path: string): string | null {
+    const baseUrl = process.env.FRONTEND_URL;
+    return baseUrl ? new URL(path, baseUrl).toString() : null;
   }
 }

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Redirect,
@@ -17,6 +18,8 @@ import { AdminGuard } from '../auth/presentation/guards/admin.guard';
 import type { TokenPayload } from '../auth/domain/services/token-generator.port';
 import { PaymentsService } from './payments.service';
 import { CreateCustomerWalletTopupDto } from './create-customer-wallet-topup.dto';
+import { RaiseServiceRequestDisputeDto } from './dto/raise-service-request-dispute.dto';
+import { CreateServiceRequestDisputeMessageDto } from './dto/create-service-request-dispute-message.dto';
 
 @ApiTags('Customer Wallet')
 @ApiBearerAuth()
@@ -135,6 +138,22 @@ export class CustomerPaymentsController {
 
   @ApiBearerAuth()
   @ApiOperation({
+    summary: 'Withdraw a customer dispute and confirm completed work',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Post('service-requests/:requestId/confirm-disputed-completion')
+  confirmDisputedCompletion(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.paymentsService.confirmDisputedCompletion(
+      user.userId,
+      requestId,
+    );
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
     summary: 'Raise a dispute before provider earnings are released',
   })
   @UseGuards(JwtAuthGuard)
@@ -142,8 +161,47 @@ export class CustomerPaymentsController {
   raiseDispute(
     @CurrentUser() user: TokenPayload,
     @Param('requestId') requestId: string,
+    @Body() dto: RaiseServiceRequestDisputeDto,
   ) {
-    return this.paymentsService.raiseDispute(user.userId, requestId);
+    return this.paymentsService.raiseDispute(
+      user.userId,
+      requestId,
+      dto.reason,
+      dto.description,
+    );
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Edit an active customer dispute' })
+  @UseGuards(JwtAuthGuard)
+  @Patch('service-requests/:requestId/dispute')
+  updateDispute(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+    @Body() dto: RaiseServiceRequestDisputeDto,
+  ) {
+    return this.paymentsService.updateDispute(
+      user.userId,
+      requestId,
+      dto.reason,
+      dto.description,
+    );
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a message to an active service dispute' })
+  @UseGuards(JwtAuthGuard)
+  @Post('service-requests/:requestId/dispute/messages')
+  addDisputeMessage(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+    @Body() dto: CreateServiceRequestDisputeMessageDto,
+  ) {
+    return this.paymentsService.addDisputeMessage(
+      user.userId,
+      requestId,
+      dto.body,
+    );
   }
 
   @ApiOperation({

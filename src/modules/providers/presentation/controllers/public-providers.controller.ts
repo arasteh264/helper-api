@@ -27,7 +27,6 @@ const publicProviderListInclude = {
 
 const publicProviderDetailInclude = {
   ...publicProviderListInclude,
-  workingHours: true,
   reviews: {
     include: {
       customer: { select: { name: true } },
@@ -40,12 +39,18 @@ const publicProviderDetailInclude = {
   },
 } as const;
 
+const publicProviderWhere = {
+  verificationStatus: 'APPROVED',
+  isAvailable: true,
+  providerAddress: { not: null },
+} as const;
+
 const findPublicProviders = (
   prisma: PrismaService,
   pagination?: { skip: number; take: number },
 ) =>
   prisma.providerProfile.findMany({
-    where: { verificationStatus: 'APPROVED' },
+    where: publicProviderWhere,
     include: publicProviderListInclude,
     orderBy: [{ isAvailable: 'desc' }, { rating: 'desc' }],
     ...(pagination ?? {}),
@@ -53,7 +58,10 @@ const findPublicProviders = (
 
 const findPublicProvider = (prisma: PrismaService, providerProfileId: string) =>
   prisma.providerProfile.findFirst({
-    where: { id: providerProfileId, verificationStatus: 'APPROVED' },
+    where: {
+      id: providerProfileId,
+      verificationStatus: 'APPROVED',
+    },
     include: publicProviderDetailInclude,
   });
 
@@ -114,7 +122,7 @@ export class PublicProvidersController {
       ),
       isPaginated
         ? this.prisma.providerProfile.count({
-            where: { verificationStatus: 'APPROVED' },
+            where: publicProviderWhere,
           })
         : Promise.resolve(0),
     ]);
@@ -177,7 +185,6 @@ export class PublicProvidersController {
         groupId: item.specialty.groupId,
         groupName: item.specialty.group.name,
       })),
-      workingHours: 'workingHours' in provider ? provider.workingHours : [],
       portfolio: (provider.portfolioItems ?? []).flatMap((item) =>
         item.images.map((image) => image.url),
       ),

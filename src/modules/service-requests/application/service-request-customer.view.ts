@@ -15,6 +15,18 @@ export type CustomerViewSource = {
   providerEstimatedHours?: number | null;
   scheduledAt: Date | null;
   customerConfirmationDeadline?: Date | null;
+  disputeReason?: string | null;
+  disputeDescription?: string | null;
+  disputeUpdatedAt?: Date | null;
+  disputeResolvedAt?: Date | null;
+  disputeResolution?: 'PROVIDER' | 'BUYER' | null;
+  disputeResolutionNote?: string | null;
+  disputeMessages?: {
+    id: string;
+    body: string;
+    createdAt: Date;
+    author: { id: string; name: string; role: string };
+  }[];
   createdAt: Date;
   skills: { skill: { name: string } }[];
   specialtyName?: string | null;
@@ -22,7 +34,7 @@ export type CustomerViewSource = {
   acceptedProviderProfile: {
     id: string;
     rating: number;
-    user: { name: string };
+    user: { name: string; phone: string };
   } | null;
   review?: {
     id: string;
@@ -63,6 +75,24 @@ export function toCustomerView(request: CustomerViewSource) {
     customerConfirmationDeadline:
       request.customerConfirmationDeadline?.toISOString(),
     status,
+    dispute: request.disputeReason || request.status === 'DISPUTED'
+      ? {
+          reason: request.disputeReason ?? null,
+          description: request.disputeDescription ?? null,
+          updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
+          resolved: Boolean(request.disputeResolvedAt),
+          resolution: request.disputeResolution ?? null,
+          resolutionNote: request.disputeResolutionNote ?? null,
+          messages: (request.disputeMessages ?? []).map((message) => ({
+            id: message.id,
+            body: message.body,
+            createdAt: message.createdAt.toISOString(),
+            authorId: message.author.id,
+            authorName: message.author.name,
+            authorRole: message.author.role,
+          })),
+        }
+      : null,
     offersCount: provider ? 1 : 0,
     budget:
       request.budgetMin !== null && request.budgetMax !== null
@@ -92,6 +122,7 @@ export function toCustomerView(request: CustomerViewSource) {
             request.specialtyName ??
             request.skills.map((item) => item.skill.name).join('، '),
           rating: provider.rating,
+          ...(request.payments?.length ? { phone: provider.user.phone } : {}),
         }
       : undefined,
     images: request.images.map((image) => image.url),

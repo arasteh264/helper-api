@@ -225,7 +225,7 @@ export class ServiceRequestController {
         specialty: { select: { name: true } },
         images: true,
         acceptedProviderProfile: {
-          include: { user: { select: { name: true } } },
+          include: { user: { select: { name: true, phone: true } } },
         },
         review: {
           select: { id: true, rating: true, text: true, createdAt: true },
@@ -234,6 +234,15 @@ export class ServiceRequestController {
           where: { status: 'PAID' },
           select: { id: true },
           take: 1,
+        },
+        disputeMessages: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, role: true } },
+          },
         },
       },
     });
@@ -495,6 +504,18 @@ export class ServiceRequestController {
     providerEstimatedHours: number | null;
     scheduledAt: Date | null;
     customerConfirmationDeadline: Date | null;
+    disputeReason: string | null;
+    disputeDescription: string | null;
+    disputeUpdatedAt: Date | null;
+    disputeResolvedAt: Date | null;
+    disputeResolution: 'PROVIDER' | 'BUYER' | null;
+    disputeResolutionNote: string | null;
+    disputeMessages: {
+      id: string;
+      body: string;
+      createdAt: Date;
+      author: { id: string; name: string; role: string };
+    }[];
     createdAt: Date;
     skills: { skill: { name: string } }[];
     specialty: { name: string } | null;
@@ -502,7 +523,7 @@ export class ServiceRequestController {
     acceptedProviderProfile: {
       id: string;
       rating: number;
-      user: { name: string };
+      user: { name: string; phone: string };
     } | null;
     review: {
       id: string;
@@ -541,6 +562,24 @@ export class ServiceRequestController {
       customerConfirmationDeadline:
         request.customerConfirmationDeadline?.toISOString(),
       status,
+      dispute: request.disputeReason || request.status === 'DISPUTED'
+        ? {
+            reason: request.disputeReason,
+            description: request.disputeDescription,
+            updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
+            resolved: Boolean(request.disputeResolvedAt),
+            resolution: request.disputeResolution,
+            resolutionNote: request.disputeResolutionNote,
+            messages: request.disputeMessages.map((message) => ({
+              id: message.id,
+              body: message.body,
+              createdAt: message.createdAt.toISOString(),
+              authorId: message.author.id,
+              authorName: message.author.name,
+              authorRole: message.author.role,
+            })),
+          }
+        : null,
       offersCount: provider ? 1 : 0,
       budget:
         request.budgetMin !== null && request.budgetMax !== null
@@ -570,6 +609,7 @@ export class ServiceRequestController {
               request.specialty?.name ??
               request.skills.map((item) => item.skill.name).join('، '),
             rating: provider.rating,
+            ...(request.payments.length ? { phone: provider.user.phone } : {}),
           }
         : undefined,
       images: request.images.map((image) => image.url),

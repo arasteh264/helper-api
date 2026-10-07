@@ -11,6 +11,7 @@ export interface ProviderCandidate {
   providerProfileId: string;
   latitude: number;
   longitude: number;
+  serviceAreaRadiusKm: number;
 }
 
 export interface PendingNotification {

@@ -1,6 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsArray,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -8,27 +7,9 @@ import {
   Max,
   Min,
   MaxLength,
-  ValidateNested,
+  IsIn,
+  MinLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class ProviderWorkingHourDto {
-  @ApiProperty({ example: 6 })
-  @IsNumber()
-  dayOfWeek: number;
-
-  @ApiProperty({ example: true })
-  @IsBoolean()
-  isActive: boolean;
-
-  @ApiProperty({ example: '08:00' })
-  @IsString()
-  startTime: string;
-
-  @ApiProperty({ example: '21:00' })
-  @IsString()
-  endTime: string;
-}
 
 export class UpdateProviderProfileDto {
   @ApiPropertyOptional({ example: 'برقکار با ۱۰ سال سابقه' })
@@ -56,10 +37,22 @@ export class UpdateProviderProfileDto {
   @Max(180)
   serviceAreaLongitude?: number | null;
 
-  @ApiPropertyOptional({ type: [ProviderWorkingHourDto] })
+  @ApiPropertyOptional({ example: 20, minimum: 1, maximum: 200 })
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ProviderWorkingHourDto)
-  workingHours?: ProviderWorkingHourDto[];
+  @IsNumber()
+  @Min(1)
+  @Max(200)
+  serviceAreaRadiusKm?: number;
+
+  @ApiPropertyOptional({ example: 'تهران، خیابان نمونه، پلاک ۱۲' })
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  providerAddress?: string;
+
+  @ApiPropertyOptional({ enum: ['HOME', 'BUSINESS'], example: 'HOME' })
+  @IsOptional()
+  @IsIn(['HOME', 'BUSINESS'])
+  providerAddressType?: 'HOME' | 'BUSINESS';
 }

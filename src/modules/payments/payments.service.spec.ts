@@ -47,7 +47,10 @@ describe('PaymentsService', () => {
         update: jest.fn().mockResolvedValue({}),
       },
     };
-    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const notifications = {
+      createForUser: jest.fn().mockResolvedValue(null),
+      sendProviderJobConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new PaymentsService(
       prisma as unknown as PrismaService,
       notifications as never,
@@ -103,7 +106,10 @@ describe('PaymentsService', () => {
         callback(tx),
       ),
     };
-    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const notifications = {
+      createForUser: jest.fn().mockResolvedValue(null),
+      sendProviderJobConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new PaymentsService(
       prisma as unknown as PrismaService,
       notifications as never,
@@ -138,6 +144,11 @@ describe('PaymentsService', () => {
       walletBalanceToman: 200000,
     });
     expect(notifications.createForUser).toHaveBeenCalledTimes(4);
+    expect(notifications.sendProviderJobConfirmationEmail).toHaveBeenCalledWith(
+      'provider-1',
+      'تعمیرات',
+      'request-1',
+    );
   });
 
   it('credits a wallet top-up only after Zarinpal verifies the callback', async () => {
@@ -168,7 +179,10 @@ describe('PaymentsService', () => {
         callback(tx),
       ),
     };
-    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const notifications = {
+      createForUser: jest.fn().mockResolvedValue(null),
+      sendProviderJobConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new PaymentsService(
       prisma as unknown as PrismaService,
       notifications as never,
@@ -400,6 +414,34 @@ describe('PaymentsService', () => {
     expect(result.releasedAmountToman).toBe(450000);
   });
 
+  it('lets the customer withdraw an active dispute and confirm completion', async () => {
+    const prisma = {};
+    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+    const confirm = jest
+      .spyOn(service, 'confirmCompletion')
+      .mockResolvedValue({ status: 'COMPLETED' } as never);
+
+    await service.confirmDisputedCompletion('customer-1', 'request-1');
+
+    expect(confirm).toHaveBeenCalledWith(
+      'customer-1',
+      'request-1',
+      false,
+      'DISPUTED',
+      {
+        resolution: 'PROVIDER',
+        resolvedByUserId: 'customer-1',
+        actor: 'CUSTOMER',
+        reason:
+          'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
+      },
+    );
+  });
+
   it('only allows disputes before the customer confirmation deadline', async () => {
     const request = {
       title: 'تعمیرات',
@@ -417,7 +459,12 @@ describe('PaymentsService', () => {
       notifications as never,
     );
 
-    await service.raiseDispute('customer-1', 'request-1');
+    await service.raiseDispute(
+      'customer-1',
+      'request-1',
+      'WORK_QUALITY',
+      'کیفیت اجرا با توافق اولیه مطابقت ندارد',
+    );
 
     expect(prisma.serviceRequest.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -428,9 +475,149 @@ describe('PaymentsService', () => {
         data: {
           status: 'DISPUTED',
           customerConfirmationDeadline: null,
+          disputeReason: 'WORK_QUALITY',
+          disputeDescription: 'کیفیت اجرا با توافق اولیه مطابقت ندارد',
+          disputeUpdatedAt: expect.any(Date),
         },
       }),
     );
+  });
+
+  it('allows a customer to update an active dispute before admin resolution', async () => {
+    const prisma = {
+      serviceRequest: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      { createForUser: jest.fn() } as never,
+    );
+
+    await service.updateDispute(
+      'customer-1',
+      'request-1',
+      'PRICE_DISAGREEMENT',
+      'هزینه‌ی ثبت‌شده بیشتر از مبلغ مورد توافق است',
+    );
+
+    expect(prisma.serviceRequest.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'request-1',
+        customerId: 'customer-1',
+        status: 'DISPUTED',
+        disputeResolvedAt: null,
+      },
+      data: {
+        disputeReason: 'PRICE_DISAGREEMENT',
+        disputeDescription: 'هزینه‌ی ثبت‌شده بیشتر از مبلغ مورد توافق است',
+        disputeUpdatedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('stores admin dispute follow-up messages and notifies both participants', async () => {
+    const message = {
+      id: 'message-1',
+      body: 'لطفاً تصویر فاکتور را ارسال کنید',
+      createdAt: new Date('2026-10-07T09:00:00.000Z'),
+      author: { id: 'admin-1', name: 'مدیر', role: 'ADMIN' },
+    };
+    const tx = {
+      serviceRequestDisputeMessage: {
+        create: jest.fn().mockResolvedValue(message),
+      },
+      serviceRequest: {
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const prisma = {
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          title: 'تعمیرات',
+          customerId: 'customer-1',
+          acceptedProviderProfile: { userId: 'provider-1' },
+        }),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+
+    await expect(
+      service.addAdminDisputeMessage(
+        'request-1',
+        'admin-1',
+        '  لطفاً تصویر فاکتور را ارسال کنید  ',
+      ),
+    ).resolves.toEqual(message);
+
+    expect(tx.serviceRequestDisputeMessage.create).toHaveBeenCalledWith({
+      data: {
+        serviceRequestId: 'request-1',
+        authorUserId: 'admin-1',
+        body: 'لطفاً تصویر فاکتور را ارسال کنید',
+      },
+      select: expect.any(Object),
+    });
+    expect(notifications.createForUser).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes an unpaid provider dispute without issuing a refund or settlement', async () => {
+    const disputed = {
+      id: 'request-1',
+      title: 'تعمیرات',
+      customerId: 'customer-1',
+      acceptedProviderProfile: { userId: 'provider-1' },
+    };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue(disputed),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          customerId: 'customer-1',
+          payments: [],
+        }),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+
+    await expect(
+      service.resolveDisputedRequestByAdmin(
+        'request-1',
+        'PROVIDER',
+        'admin-1',
+        'مشتری وجه توافق‌شده را پرداخت نکرده است',
+      ),
+    ).resolves.toMatchObject({
+      requestId: 'request-1',
+      resolution: 'PROVIDER',
+      status: 'CANCELLED',
+    });
+    expect(tx.serviceRequest.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'CANCELLED',
+          disputeResolution: 'PROVIDER',
+        }),
+      }),
+    );
+    expect(notifications.createForUser).toHaveBeenCalledTimes(2);
   });
 
   it('lets an admin resolve a dispute in the Provider favor through the settlement path', async () => {
@@ -439,6 +626,7 @@ describe('PaymentsService', () => {
         findFirst: jest.fn().mockResolvedValue({
           id: 'request-1',
           customerId: 'customer-1',
+          payments: [{ id: 'payment-1', amountToman: 300000 }],
         }),
       },
     };
@@ -465,8 +653,9 @@ describe('PaymentsService', () => {
       'DISPUTED',
       {
         resolution: 'PROVIDER',
-        adminUserId: 'admin-1',
+        resolvedByUserId: 'admin-1',
         reason: 'کار طبق توافق انجام شده است',
+        actor: 'ADMIN',
       },
     );
   });
@@ -482,7 +671,14 @@ describe('PaymentsService', () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       serviceRequest: {
-        findFirst: jest.fn().mockResolvedValue(disputedRequest),
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'request-1',
+            customerId: 'customer-1',
+            payments: [{ id: 'payment-1', amountToman: 300000 }],
+          })
+          .mockResolvedValue(disputedRequest),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -583,7 +779,10 @@ describe('PaymentsService', () => {
         callback(tx),
       ),
     };
-    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const notifications = {
+      createForUser: jest.fn().mockResolvedValue(null),
+      sendProviderJobConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new PaymentsService(
       prisma as unknown as PrismaService,
       notifications as never,
@@ -614,6 +813,11 @@ describe('PaymentsService', () => {
     );
     expect(redirect).toContain('status=success');
     expect(notifications.createForUser).toHaveBeenCalledTimes(4);
+    expect(notifications.sendProviderJobConfirmationEmail).toHaveBeenCalledWith(
+      'provider-1',
+      'تعمیرات',
+      'request-1',
+    );
   });
 
   it('does not repeat gateway verification while a pending payment is in cooldown', async () => {
