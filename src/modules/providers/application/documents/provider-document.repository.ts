@@ -38,6 +38,7 @@ export interface ProviderDocumentRepository {
     id: string,
     status: 'APPROVED' | 'REJECTED',
     rejectionNote?: string | null,
+    adminUserId?: string,
   ): Promise<ProviderDocumentRecord>;
 }
 

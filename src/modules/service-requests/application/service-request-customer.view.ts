@@ -3,6 +3,7 @@ export type CustomerViewSource = {
   title: string;
   description: string;
   status: string;
+  adminReviewNote?: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -34,6 +35,7 @@ export type CustomerViewSource = {
   acceptedProviderProfile: {
     id: string;
     rating: number;
+    avatarUrl?: string | null;
     user: { name: string; phone: string };
   } | null;
   review?: {
@@ -49,6 +51,7 @@ export function toCustomerView(request: CustomerViewSource) {
   const provider = request.acceptedProviderProfile;
   const status =
     {
+      PENDING_ADMIN_REVIEW: 'awaiting_admin_review',
       OPEN: 'awaiting_offers',
       OFFER_ACCEPTED: 'offers_received',
       CUSTOMER_CONFIRMATION_PENDING: 'awaiting_payment',
@@ -75,6 +78,7 @@ export function toCustomerView(request: CustomerViewSource) {
     customerConfirmationDeadline:
       request.customerConfirmationDeadline?.toISOString(),
     status,
+    adminReviewNote: request.adminReviewNote ?? null,
     dispute: request.disputeReason || request.status === 'DISPUTED'
       ? {
           reason: request.disputeReason ?? null,
@@ -122,6 +126,7 @@ export function toCustomerView(request: CustomerViewSource) {
             request.specialtyName ??
             request.skills.map((item) => item.skill.name).join('، '),
           rating: provider.rating,
+          avatarUrl: provider.avatarUrl ?? null,
           ...(request.payments?.length ? { phone: provider.user.phone } : {}),
         }
       : undefined,

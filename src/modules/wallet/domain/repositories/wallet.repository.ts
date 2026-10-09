@@ -51,6 +51,7 @@ export interface CreditWalletInput {
   providerProfileId: string;
   amount: number;
   type: 'EARNING' | 'ADJUSTMENT';
+  adminUserId?: string;
   description?: string;
   serviceRequestId?: string;
 }
@@ -136,6 +137,8 @@ export interface WalletRepository {
 
   updateCommissionRate(
     rate: number,
+    adminUserId: string,
+    reason: string,
   ): Promise<{ commissionRate: number; minWithdrawal: number }>;
 
   createPayoutRequest(

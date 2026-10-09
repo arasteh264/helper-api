@@ -179,6 +179,15 @@ export class ServiceRequest {
     this._updatedAt = new Date();
   }
 
+  holdForAdminReview(): void {
+    this.assertTransition(
+      ServiceRequestStatus.OPEN,
+      ServiceRequestStatus.PENDING_ADMIN_REVIEW,
+    );
+    this._status = ServiceRequestStatus.PENDING_ADMIN_REVIEW;
+    this._updatedAt = new Date();
+  }
+
   addSkill(skillId: string): void {
     if (this._status !== ServiceRequestStatus.OPEN) {
       throw new Error('Cannot add skills after the request is no longer open');

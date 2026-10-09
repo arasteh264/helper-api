@@ -1073,6 +1073,23 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       if (!completed.count) {
         throw new ConflictException('وضعیت این کار تغییر کرده است');
       }
+      if (adminResolvedDispute && disputeResolution) {
+        await tx.adminAuditLog.create({
+          data: {
+            actorUserId: disputeResolution.resolvedByUserId,
+            action: 'DISPUTE_RESOLVED',
+            targetType: 'SERVICE_REQUEST',
+            targetId: requestId,
+            reason: disputeResolution.reason,
+            beforeState: { status: 'DISPUTED' },
+            afterState: {
+              status: 'COMPLETED',
+              resolution: disputeResolution.resolution,
+              releasedAmountToman: request.providerPriceToman,
+            },
+          },
+        });
+      }
 
       const wallet = await tx.wallet.upsert({
         where: { providerProfileId: request.acceptedProviderProfileId },
@@ -1129,7 +1146,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
             ? 'اختلاف به نفع provider تعیین‌تکلیف و درآمد تسویه شد'
             : customerConfirmedDispute
               ? 'مشتری اختلاف را پس گرفت و انجام کار را تأیید کرد'
-            : 'اتمام کار تأیید و درآمد provider تسویه شد',
+              : 'اتمام کار تأیید و درآمد provider تسویه شد',
         releasedAmountToman: request.providerPriceToman - commission,
         providerUserId: request.acceptedProviderProfile.userId,
         customerId: request.customerId,
@@ -1147,14 +1164,14 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
             ? 'اختلاف به نفع شما تعیین‌تکلیف شد'
             : customerConfirmedDispute
               ? 'مشتری اختلاف را پس گرفت و کار را تأیید کرد'
-            : 'پایان کار تأیید شد',
+              : 'پایان کار تأیید شد',
         body: autoConfirmed
           ? `مهلت پاسخ مشتری برای درخواست «${completion.requestTitle}» به پایان رسید و درآمد آزاد شد.`
           : adminResolvedDispute
             ? `پس از بررسی اختلاف درخواست «${completion.requestTitle}»، درآمد برای شما آزاد شد.`
             : customerConfirmedDispute
               ? `مشتری اختلاف درخواست «${completion.requestTitle}» را پس گرفت و انجام کار را تأیید کرد؛ درآمد برای شما آزاد شد.`
-            : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
+              : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
         serviceRequestId: requestId,
       }),
       this.notifications.createForUser({
@@ -1199,7 +1216,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       resolution: 'PROVIDER',
       resolvedByUserId: userId,
       actor: 'CUSTOMER',
-      reason: 'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
+      reason:
+        'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
     });
   }
 
@@ -1210,9 +1228,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     description: string,
   ) {
     if (reason === 'CUSTOMER_NON_PAYMENT') {
-      throw new BadRequestException(
-        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
-      );
+      throw new BadRequestException('این نوع اختلاف فقط توسط متخصص ثبت می‌شود');
     }
     const now = new Date();
     const request = await this.prisma.serviceRequest.findFirst({
@@ -1274,9 +1290,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     description: string,
   ) {
     if (reason === 'CUSTOMER_NON_PAYMENT') {
-      throw new BadRequestException(
-        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
-      );
+      throw new BadRequestException('این نوع اختلاف فقط توسط متخصص ثبت می‌شود');
     }
     const result = await this.prisma.serviceRequest.updateMany({
       where: {
@@ -1302,10 +1316,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: requestId,
         status: 'DISPUTED',
-        OR: [
-          { customerId: userId },
-          { acceptedProviderProfile: { userId } },
-        ],
+        OR: [{ customerId: userId }, { acceptedProviderProfile: { userId } }],
       },
       select: {
         id: true,
@@ -1363,7 +1374,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
-  async addAdminDisputeMessage(requestId: string, adminUserId: string, body: string) {
+  async addAdminDisputeMessage(
+    requestId: string,
+    adminUserId: string,
+    body: string,
+  ) {
     const request = await this.prisma.serviceRequest.findFirst({
       where: { id: requestId, status: 'DISPUTED' },
       select: {
@@ -1438,10 +1453,14 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         disputeDescription: true,
         disputeUpdatedAt: true,
         createdAt: true,
-        customer: { select: { id: true, name: true, phone: true, email: true } },
+        customer: {
+          select: { id: true, name: true, phone: true, email: true },
+        },
         acceptedProviderProfile: {
           select: {
-            user: { select: { id: true, name: true, phone: true, email: true } },
+            user: {
+              select: { id: true, name: true, phone: true, email: true },
+            },
           },
         },
         payments: {
@@ -1538,6 +1557,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         if (!updated.count) {
           throw new ConflictException('وضعیت اختلاف تغییر کرده است');
         }
+        await tx.adminAuditLog.create({
+          data: {
+            actorUserId: adminUserId,
+            action: 'DISPUTE_RESOLVED',
+            targetType: 'SERVICE_REQUEST',
+            targetId: requestId,
+            reason: normalizedReason,
+            beforeState: { status: 'DISPUTED' },
+            afterState: { status: 'CANCELLED', resolution },
+          },
+        });
         return disputed;
       });
       const title =
@@ -1679,6 +1709,22 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           paidAt: new Date(),
         },
       });
+      await tx.adminAuditLog.create({
+        data: {
+          actorUserId: adminUserId,
+          action: 'DISPUTE_RESOLVED',
+          targetType: 'SERVICE_REQUEST',
+          targetId: disputedRequest.id,
+          reason: normalizedReason,
+          beforeState: { status: 'DISPUTED' },
+          afterState: {
+            status: 'CANCELLED',
+            resolution,
+            refundedAmountToman: payment.amountToman,
+            refundDestination: 'CUSTOMER_WALLET',
+          },
+        },
+      });
 
       return {
         requestId: disputedRequest.id,
@@ -1783,6 +1829,40 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       page: safePage,
       pageSize: safePageSize,
       total,
+    };
+  }
+
+  async getAdminPaymentDetails(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        serviceRequest: {
+          include: {
+            customer: { select: { name: true, phone: true, email: true } },
+            acceptedProviderProfile: {
+              include: {
+                user: { select: { name: true, phone: true, email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!payment) throw new NotFoundException('پرداخت پیدا نشد');
+
+    return {
+      title: payment.serviceRequest.title,
+      amountToman: payment.amountToman,
+      gateway: payment.gateway,
+      status: payment.status,
+      referenceId: payment.referenceId,
+      failureReason: payment.failureReason,
+      createdAt: payment.createdAt,
+      paidAt: payment.paidAt,
+      lastVerificationAttemptAt: payment.lastVerificationAttemptAt,
+      requestStatus: payment.serviceRequest.status,
+      customer: payment.serviceRequest.customer,
+      provider: payment.serviceRequest.acceptedProviderProfile?.user ?? null,
     };
   }
 

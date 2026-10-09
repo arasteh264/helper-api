@@ -33,6 +33,11 @@ import { VerifyRegistrationOtpUseCase } from '../../application/verify-registrat
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import type { OtpSender } from '../../../auth/domain/services/otp-sender.port';
 import { OTP_SENDER } from '../../../auth/domain/services/otp-sender.token';
+import { randomInt } from 'node:crypto';
+import {
+  OTP_TTL_SECONDS,
+  RedisOtpStore,
+} from '../../../auth/infrastructure/services/redis-otp.store';
 
 @ApiTags('Users')
 @Controller('users')
@@ -45,6 +50,7 @@ export class UsersController {
     private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
     private readonly prisma: PrismaService,
     @Inject(OTP_SENDER) private readonly otpSender: OtpSender,
+    private readonly otpStore: RedisOtpStore,
   ) {}
 
   @ApiOperation({ summary: 'Create a new user' })
@@ -79,15 +85,15 @@ export class UsersController {
       );
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 90 * 1000);
+    const otpCode = randomInt(100000, 1000000).toString();
 
-    await this.prisma.pendingRegistration.update({
-      where: { id: pending.id },
-      data: { otpCode, otpExpiresAt },
-    });
-
-    await this.otpSender.send(pending.email, otpCode, 90);
+    await this.otpStore.save('registration', dto.phone, otpCode);
+    try {
+      await this.otpSender.send(pending.email, otpCode, OTP_TTL_SECONDS);
+    } catch (error) {
+      await this.otpStore.delete('registration', dto.phone);
+      throw error;
+    }
 
     return { message: 'OTP sent' };
   }

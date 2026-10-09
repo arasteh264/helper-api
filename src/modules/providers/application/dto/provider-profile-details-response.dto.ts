@@ -10,6 +10,9 @@ class ProviderUserDto {
 
   @ApiProperty()
   phone!: string;
+
+  @ApiProperty({ enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'] })
+  status!: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 }
 
 class ProviderSkillDto {

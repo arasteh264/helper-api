@@ -11,16 +11,31 @@ import type {
 } from '../domain/repositories/specialty.repository';
 import { SpecialtyGroupEntity } from '../domain/entities/specialty-group.entity';
 import { SpecialtyEntity } from '../domain/entities/specialty.entity';
+import { RedisService } from '../../../infrastructure/cache/redis.service';
 
 @Injectable()
 export class PrismaSpecialtyRepository implements ISpecialtyRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly cacheTtlSeconds = Math.max(
+    1,
+    Number(process.env.SPECIALTY_CACHE_TTL_SECONDS) || 60,
+  );
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   async findActiveGroups(): Promise<SpecialtyGroupRecord[]> {
-    return this.prisma.specialtyGroup.findMany({
+    const cacheKey = 'specialties:active-groups';
+    const cached = await this.redis.getJson<SpecialtyGroupRecord[]>(cacheKey);
+    if (cached) return cached;
+
+    const groups = await this.prisma.specialtyGroup.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+    await this.redis.setJson(cacheKey, groups, this.cacheTtlSeconds);
+    return groups;
   }
 
   async findAllGroups(): Promise<SpecialtyGroupRecord[]> {
@@ -32,6 +47,10 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
   async findActiveSpecialtiesByGroupId(
     groupId: string,
   ): Promise<SpecialtyEntity[]> {
+    const cacheKey = `specialties:active-group:${groupId}`;
+    const cached = await this.redis.getJson<SpecialtyEntity[]>(cacheKey);
+    if (cached) return cached;
+
     const specialties = await this.prisma.specialty.findMany({
       where: { groupId, isActive: true },
       include: {
@@ -51,7 +70,7 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
       orderBy: { sortOrder: 'asc' },
     });
 
-    return specialties.map(
+    const result = specialties.map(
       (specialty) =>
         new SpecialtyEntity(
           specialty.id,
@@ -64,6 +83,8 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
           specialty._count.providers,
         ),
     );
+    await this.redis.setJson(cacheKey, result, this.cacheTtlSeconds);
+    return result;
   }
 
   async findSpecialtiesByGroupId(groupId: string): Promise<SpecialtyRecord[]> {
@@ -144,7 +165,7 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
   async createGroup(
     input: CreateSpecialtyGroupInput,
   ): Promise<SpecialtyGroupRecord> {
-    return this.prisma.specialtyGroup.create({
+    const group = await this.prisma.specialtyGroup.create({
       data: {
         name: input.name,
         slug: input.slug,
@@ -154,20 +175,25 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
         iconPublicId: input.iconPublicId ?? null,
       },
     });
+    await this.invalidateSpecialtyCache();
+    return group;
   }
 
   async updateGroup(
     id: string,
     input: UpdateSpecialtyGroupInput,
   ): Promise<SpecialtyGroupRecord> {
-    return this.prisma.specialtyGroup.update({
+    const group = await this.prisma.specialtyGroup.update({
       where: { id },
       data: input,
     });
+    await this.invalidateSpecialtyCache();
+    return group;
   }
 
   async deleteGroup(id: string): Promise<void> {
     await this.prisma.specialtyGroup.delete({ where: { id } });
+    await this.invalidateSpecialtyCache();
   }
 
   async findSpecialtyById(id: string): Promise<SpecialtyRecord | null> {
@@ -183,7 +209,7 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
   }
 
   async createSpecialty(input: CreateSpecialtyInput): Promise<SpecialtyRecord> {
-    return this.prisma.specialty.create({
+    const specialty = await this.prisma.specialty.create({
       data: {
         groupId: input.groupId,
         name: input.name,
@@ -197,19 +223,28 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
         hourlyUnitLabel: input.hourlyUnitLabel ?? null,
       },
     });
+    await this.invalidateSpecialtyCache();
+    return specialty;
   }
 
   async updateSpecialty(
     id: string,
     input: UpdateSpecialtyInput,
   ): Promise<SpecialtyRecord> {
-    return this.prisma.specialty.update({
+    const specialty = await this.prisma.specialty.update({
       where: { id },
       data: input,
     });
+    await this.invalidateSpecialtyCache();
+    return specialty;
   }
 
   async deleteSpecialty(id: string): Promise<void> {
     await this.prisma.specialty.delete({ where: { id } });
+    await this.invalidateSpecialtyCache();
+  }
+
+  private invalidateSpecialtyCache(): Promise<void> {
+    return this.redis.deleteByPrefix('specialties:');
   }
 }

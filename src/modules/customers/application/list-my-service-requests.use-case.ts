@@ -21,6 +21,7 @@ export class ListMyServiceRequestsUseCase {
       ServiceRequestStatus[]
     > = {
       active: [
+        'PENDING_ADMIN_REVIEW',
         'OPEN',
         'OFFER_ACCEPTED',
         'CUSTOMER_CONFIRMATION_PENDING',

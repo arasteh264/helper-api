@@ -253,6 +253,26 @@ export class PrismaWalletRepository implements WalletRepository {
             },
           });
         }
+        if (
+          input.type === WalletTransactionType.ADJUSTMENT &&
+          input.adminUserId
+        ) {
+          await db.adminAuditLog.create({
+            data: {
+              actorUserId: input.adminUserId,
+              action: 'PROVIDER_WALLET_CREDITED',
+              targetType: 'PROVIDER',
+              targetId: profile.id,
+              reason:
+                input.description?.trim() || 'مدیر کیف پول متخصص را تعدیل کرد',
+              afterState: {
+                amountToman: input.amount,
+                walletTransactionId: earning.id,
+                balanceAfter: earning.balanceAfter,
+              },
+            },
+          });
+        }
 
         return earning;
       });
@@ -329,11 +349,33 @@ export class PrismaWalletRepository implements WalletRepository {
     };
   }
 
-  async updateCommissionRate(rate: number) {
-    const configuration = await this.prisma.walletConfiguration.upsert({
-      where: { id: 'global' },
-      update: { commissionRate: rate },
-      create: { id: 'global', commissionRate: rate },
+  async updateCommissionRate(
+    rate: number,
+    adminUserId: string,
+    reason: string,
+  ) {
+    const configuration = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.walletConfiguration.findUnique({
+        where: { id: 'global' },
+        select: { commissionRate: true },
+      });
+      const updated = await tx.walletConfiguration.upsert({
+        where: { id: 'global' },
+        update: { commissionRate: rate },
+        create: { id: 'global', commissionRate: rate },
+      });
+      await tx.adminAuditLog.create({
+        data: {
+          actorUserId: adminUserId,
+          action: 'COMMISSION_RATE_UPDATED',
+          targetType: 'COMMISSION',
+          targetId: 'global',
+          reason: reason.trim(),
+          beforeState: { commissionRate: previous?.commissionRate ?? null },
+          afterState: { commissionRate: updated.commissionRate },
+        },
+      });
+      return updated;
     });
     return {
       commissionRate: configuration.commissionRate,
@@ -503,6 +545,29 @@ export class PrismaWalletRepository implements WalletRepository {
           },
         });
       }
+
+      await db.adminAuditLog.create({
+        data: {
+          actorUserId: input.adminUserId,
+          action:
+            input.decision === 'PAID'
+              ? 'PAYOUT_MARKED_PAID'
+              : 'PAYOUT_REJECTED',
+          targetType: 'PAYOUT',
+          targetId: payout.id,
+          reason:
+            input.decision === 'PAID'
+              ? `ثبت واریز با کد پیگیری ${input.referenceCode}`
+              : (input.rejectReason ?? 'درخواست برداشت رد شد'),
+          beforeState: { status: payout.status, amount: payout.amount },
+          afterState: {
+            status: input.decision,
+            amount: payout.amount,
+            referenceCode:
+              input.decision === 'PAID' ? input.referenceCode : null,
+          },
+        },
+      });
 
       const reviewed = await db.payoutRequest.findUniqueOrThrow({
         where: { id: payout.id },

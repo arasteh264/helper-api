@@ -22,7 +22,12 @@ export interface ProviderProfileDetails {
   providerAddressType: ProviderAddressType;
   createdAt: Date;
   updatedAt: Date;
-  user: { name: string; email: string; phone: string };
+  user: {
+    name: string;
+    email: string;
+    phone: string;
+    status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  };
   skills: { id: string; name: string }[];
   specialties: {
     id: string;
@@ -51,7 +56,16 @@ export interface AdminProviderInsights {
 
 export interface ProviderProfileRepository {
   save(profile: ProviderProfile): Promise<void>;
-  update(profile: ProviderProfile): Promise<void>;
+  update(
+    profile: ProviderProfile,
+    audit?: {
+      actorUserId: string;
+      action: string;
+      reason: string;
+      beforeState: Record<string, string | number | boolean | null>;
+      afterState: Record<string, string | number | boolean | null>;
+    },
+  ): Promise<void>;
 
   findByUserId(userId: string): Promise<ProviderProfile | null>;
   findById(id: string): Promise<ProviderProfile | null>;

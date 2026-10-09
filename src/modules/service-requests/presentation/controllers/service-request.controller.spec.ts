@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ServiceRequestController } from './service-request.controller';
 
 jest.mock('../../../../infrastructure/database/prisma.service', () => ({
@@ -23,6 +23,12 @@ describe('ServiceRequestController reviews', () => {
     serviceRequest: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
+    },
+    providerProfile: {
+      findFirst: jest.fn(),
+    },
+    providerRequestInvitation: {
+      upsert: jest.fn(),
     },
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
       callback(tx),
@@ -161,5 +167,72 @@ describe('ServiceRequestController reviews', () => {
       }),
     ).rejects.toThrow(ConflictException);
     expect(prisma.serviceRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects inviting a specialist when the request is outside their service area', async () => {
+    prisma.serviceRequest.findFirst.mockResolvedValueOnce({
+      id: 'request-1',
+      latitude: 35,
+      longitude: 51,
+      skills: [],
+      specialtyId: 'specialty-1',
+    });
+    prisma.providerProfile.findFirst.mockResolvedValueOnce({
+      id: 'provider-profile-1',
+      serviceAreaLatitude: 35.1,
+      serviceAreaLongitude: 51,
+      serviceAreaRadiusKm: 10,
+    });
+
+    await expect(
+      controller.inviteProvider(customer, 'request-1', {
+        providerProfileId: 'provider-profile-1',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.providerRequestInvitation.upsert).not.toHaveBeenCalled();
+  });
+
+  it('requires a request location before inviting a specialist', async () => {
+    prisma.serviceRequest.findFirst.mockResolvedValueOnce({
+      id: 'request-1',
+      latitude: null,
+      longitude: null,
+      skills: [],
+      specialtyId: 'specialty-1',
+    });
+
+    await expect(
+      controller.inviteProvider(customer, 'request-1', {
+        providerProfileId: 'provider-profile-1',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.providerProfile.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('invites a specialist when the request is inside their service area', async () => {
+    prisma.serviceRequest.findFirst.mockResolvedValueOnce({
+      id: 'request-1',
+      latitude: 35,
+      longitude: 51,
+      skills: [],
+      specialtyId: 'specialty-1',
+    });
+    prisma.providerProfile.findFirst.mockResolvedValueOnce({
+      id: 'provider-profile-1',
+      serviceAreaLatitude: 35.001,
+      serviceAreaLongitude: 51,
+      serviceAreaRadiusKm: 10,
+    });
+    prisma.providerRequestInvitation.upsert.mockResolvedValueOnce({
+      id: 'invitation-1',
+      status: 'PENDING',
+      createdAt: new Date(),
+    });
+
+    await controller.inviteProvider(customer, 'request-1', {
+      providerProfileId: 'provider-profile-1',
+    });
+
+    expect(prisma.providerRequestInvitation.upsert).toHaveBeenCalled();
   });
 });

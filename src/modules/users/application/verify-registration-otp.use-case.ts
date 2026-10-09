@@ -10,6 +10,7 @@ import { USER_REPOSITORY } from '../domain/repositories/user.repository.token';
 import type { UserRepository } from '../domain/repositories/user.repository';
 import type { TokenGenerator } from '../../auth/domain/services/token-generator.port';
 import { TOKEN_GENERATOR } from '../../auth/domain/services/token-generator.token';
+import { RedisOtpStore } from '../../auth/infrastructure/services/redis-otp.store';
 
 @Injectable()
 export class VerifyRegistrationOtpUseCase {
@@ -19,6 +20,7 @@ export class VerifyRegistrationOtpUseCase {
     private readonly userRepository: UserRepository,
     @Inject(TOKEN_GENERATOR)
     private readonly tokenGenerator: TokenGenerator,
+    private readonly otpStore: RedisOtpStore,
   ) {}
 
   async execute(phone: string, code: string): Promise<{ accessToken: string }> {
@@ -32,14 +34,15 @@ export class VerifyRegistrationOtpUseCase {
       });
     }
 
-    if (pending.otpExpiresAt.getTime() <= Date.now()) {
+    const storedCode = await this.otpStore.get('registration', phone);
+    if (!storedCode) {
       throw new BadRequestException({
         code: 'EXPIRED_OTP',
         message: 'Code expired',
       });
     }
 
-    if (pending.otpCode !== code) {
+    if (storedCode !== code) {
       throw new BadRequestException({
         code: 'INVALID_OTP',
         message: 'Invalid code',
@@ -57,6 +60,18 @@ export class VerifyRegistrationOtpUseCase {
       throw new ConflictException({
         code: 'DUPLICATE_PHONE',
         message: 'User with this phone already exists',
+      });
+    }
+
+    const consumed = await this.otpStore.consumeIfMatches(
+      'registration',
+      phone,
+      code,
+    );
+    if (!consumed) {
+      throw new BadRequestException({
+        code: 'INVALID_OTP',
+        message: 'Invalid or expired code',
       });
     }
 

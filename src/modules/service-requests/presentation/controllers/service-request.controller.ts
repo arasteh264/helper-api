@@ -43,6 +43,8 @@ import { Logger } from '@nestjs/common';
 import { CreateServiceRequestReviewDto } from '../../application/dto/create-service-request-review.dto';
 import { MyServiceRequestsQueryDto } from '../../../../modules/customers/application/dto/my-service-requests-query.dto';
 import { UpdateServiceRequestDto } from '../../application/dto/update-service-request.dto';
+import { ServiceRequestStatus } from '../../domain/entities/service-request-status.enum';
+import { NotificationsService } from '../../../notifications/notifications.service';
 
 function isUniqueConstraintError(error: unknown): boolean {
   if (
@@ -70,6 +72,7 @@ export class ServiceRequestController {
     private readonly prisma: PrismaService,
     private readonly listMyRequests: ListMyServiceRequestsUseCase,
     private readonly matchProviders: MatchProvidersForRequestUseCase,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Get('mine')
@@ -97,6 +100,7 @@ export class ServiceRequestController {
       include: { skills: { select: { skillId: true } } },
     });
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
+    if (request.status !== 'OPEN') return [];
 
     const skillIds = request.skills.map((item) => item.skillId);
     if (!skillIds.length && !request.specialtyId) return [];
@@ -106,6 +110,12 @@ export class ServiceRequestController {
         verificationStatus: 'APPROVED',
         isAvailable: true,
         userId: { not: currentUser.userId },
+        ...(request.latitude !== null && request.longitude !== null
+          ? {
+              serviceAreaLatitude: { not: null },
+              serviceAreaLongitude: { not: null },
+            }
+          : {}),
         OR: [
           ...(request.specialtyId
             ? [{ specialties: { some: { specialtyId: request.specialtyId } } }]
@@ -149,13 +159,196 @@ export class ServiceRequestController {
                 ) * 10,
               ) / 10
             : null,
+        serviceAreaRadiusKm: provider.serviceAreaRadiusKm,
       }))
+      .filter(
+        (provider) =>
+          request.latitude === null ||
+          request.longitude === null ||
+          (provider.distanceKm !== null &&
+            provider.distanceKm <= provider.serviceAreaRadiusKm),
+      )
       .sort((left, right) => {
         if (left.distanceKm === null)
           return right.distanceKm === null ? right.rating - left.rating : 1;
         if (right.distanceKm === null) return -1;
         return left.distanceKm - right.distanceKm || right.rating - left.rating;
       });
+  }
+
+  @ApiOperation({ summary: 'List provider price quotes for a customer request' })
+  @Get(':id/offers')
+  async listOffers(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+  ) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: { id, customerId: currentUser.userId },
+      select: {
+        id: true,
+        status: true,
+        specialty: { select: { name: true } },
+        skills: { include: { skill: { select: { name: true } } } },
+      },
+    });
+    if (!request) throw new NotFoundException('درخواست پیدا نشد');
+    if (request.status !== 'OPEN') return [];
+
+    const invitations = await this.prisma.providerRequestInvitation.findMany({
+      where: {
+        serviceRequestId: id,
+        status: 'PENDING',
+        proposedPriceToman: { not: null },
+        quoteNote: { not: null },
+      },
+      include: {
+        providerProfile: {
+          include: {
+            user: { select: { name: true } },
+            specialties: { include: { specialty: { select: { name: true } } } },
+            skills: { include: { skill: { select: { name: true } } } },
+            _count: { select: { reviews: true } },
+          },
+        },
+      },
+      orderBy: [{ proposedPriceToman: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return invitations.map((invitation) => ({
+      id: invitation.id,
+      providerProfileId: invitation.providerProfileId,
+      name: invitation.providerProfile.user.name,
+      rating: invitation.providerProfile.rating,
+      reviews: invitation.providerProfile._count.reviews,
+      verified: invitation.providerProfile.isVerified,
+      avatarUrl: invitation.providerProfile.avatarUrl,
+      field:
+        invitation.providerProfile.specialties
+          .map((item) => item.specialty.name)
+          .join('، ') ||
+        invitation.providerProfile.skills
+          .map((item) => item.skill.name)
+          .join('، ') ||
+        request.specialty?.name ||
+        request.skills.map((item) => item.skill.name).join('، '),
+      distanceKm: invitation.distanceKm,
+      proposedPriceToman: invitation.proposedPriceToman,
+      quoteNote: invitation.quoteNote,
+      estimatedHours: invitation.estimatedHours,
+    }));
+  }
+
+  @ApiOperation({ summary: 'Select a provider quote and request coordination' })
+  @Post(':id/offers/select')
+  async selectOffer(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: InviteProviderDto,
+  ) {
+    const selected = await this.prisma.$transaction(async (transaction) => {
+      const request = await transaction.serviceRequest.findFirst({
+        where: {
+          id,
+          customerId: currentUser.userId,
+          status: 'OPEN',
+          acceptedProviderProfileId: null,
+        },
+        select: {
+          id: true,
+          title: true,
+          specialty: {
+            select: {
+              pricingMode: true,
+              hourlyRateToman: true,
+              hourlyUnitLabel: true,
+            },
+          },
+        },
+      });
+      if (!request) {
+        throw new ConflictException('درخواست دیگر برای انتخاب پیشنهاد در دسترس نیست');
+      }
+      const invitation =
+        await transaction.providerRequestInvitation.findFirst({
+          where: {
+            serviceRequestId: id,
+            providerProfileId: dto.providerProfileId,
+            status: 'PENDING',
+            proposedPriceToman: { not: null },
+            quoteNote: { not: null },
+          },
+          select: {
+            id: true,
+            providerProfileId: true,
+            proposedPriceToman: true,
+            estimatedHours: true,
+            providerProfile: { select: { userId: true } },
+          },
+        });
+      if (!invitation?.proposedPriceToman) {
+        throw new NotFoundException('پیشنهاد قیمت این متخصص در دسترس نیست');
+      }
+
+      const updated = await transaction.serviceRequest.updateMany({
+        where: {
+          id,
+          customerId: currentUser.userId,
+          status: 'OPEN',
+          acceptedProviderProfileId: null,
+        },
+        data: {
+          status: 'CUSTOMER_CONFIRMATION_PENDING',
+          acceptedProviderProfileId: invitation.providerProfileId,
+          providerPriceToman: invitation.proposedPriceToman,
+          providerPricingMode: request.specialty?.pricingMode ?? 'QUOTE',
+          providerHourlyRateToman:
+            request.specialty?.pricingMode === 'HOURLY'
+              ? request.specialty.hourlyRateToman
+              : null,
+          providerHourlyUnitLabel:
+            request.specialty?.pricingMode === 'HOURLY'
+              ? request.specialty.hourlyUnitLabel
+              : null,
+          providerEstimatedHours: invitation.estimatedHours,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException('درخواست هم‌زمان توسط فرد دیگری تغییر کرد');
+      }
+      await transaction.providerRequestInvitation.update({
+        where: { id: invitation.id },
+        data: { status: 'ACCEPTED', respondedAt: new Date() },
+      });
+      await transaction.providerRequestInvitation.updateMany({
+        where: {
+          serviceRequestId: id,
+          providerProfileId: { not: invitation.providerProfileId },
+          status: 'PENDING',
+        },
+        data: { status: 'WITHDRAWN', respondedAt: new Date() },
+      });
+      return {
+        providerUserId: invitation.providerProfile.userId,
+        title: request.title,
+      };
+    });
+
+    try {
+      await this.notifications.createForUser({
+        userId: selected.providerUserId,
+        category: 'OPPORTUNITIES',
+        type: 'PROVIDER_OFFER',
+        title: 'مشتری پیشنهاد شما را انتخاب کرد',
+        body: `برای درخواست «${selected.title}» درخواست هماهنگی دریافت کردید. گفتگو را در پنل بررسی کنید.`,
+        serviceRequestId: id,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify provider about selected quote for ${id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+    return { id, status: 'CUSTOMER_CONFIRMATION_PENDING' };
   }
 
   @ApiOperation({ summary: 'Invite a selected specialist to this request' })
@@ -170,6 +363,12 @@ export class ServiceRequestController {
       include: { skills: { select: { skillId: true } } },
     });
     if (!request) throw new NotFoundException('درخواست باز پیدا نشد');
+
+    if (request.latitude === null || request.longitude === null) {
+      throw new BadRequestException(
+        'برای ارسال درخواست به متخصص، موقعیت محل انجام کار الزامی است',
+      );
+    }
 
     const skillIds = request.skills.map((item) => item.skillId);
     if (!skillIds.length && !request.specialtyId) {
@@ -191,10 +390,31 @@ export class ServiceRequestController {
             : []),
         ],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        serviceAreaLatitude: true,
+        serviceAreaLongitude: true,
+        serviceAreaRadiusKm: true,
+      },
     });
     if (!provider)
       throw new NotFoundException('متخصص در دسترس این درخواست نیست');
+    if (
+      request.latitude !== null &&
+      request.longitude !== null &&
+      (provider.serviceAreaLatitude === null ||
+        provider.serviceAreaLongitude === null ||
+        this.distanceKm(
+          request.latitude,
+          request.longitude,
+          provider.serviceAreaLatitude,
+          provider.serviceAreaLongitude,
+        ) > provider.serviceAreaRadiusKm)
+    ) {
+      throw new BadRequestException(
+        'نشانی درخواست خارج از محدوده‌ی خدمت‌رسانی این متخصص است',
+      );
+    }
 
     return this.prisma.providerRequestInvitation.upsert({
       where: {
@@ -275,7 +495,7 @@ export class ServiceRequestController {
       },
     });
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
-    if (request.status !== 'OPEN') {
+    if (!['OPEN', 'PENDING_ADMIN_REVIEW'].includes(request.status)) {
       throw new ConflictException(
         'ویرایش درخواست پس از دریافت پیشنهاد متخصص امکان‌پذیر نیست',
       );
@@ -326,7 +546,7 @@ export class ServiceRequestController {
       where: {
         id: request.id,
         customerId: currentUser.userId,
-        status: 'OPEN',
+        status: request.status,
         updatedAt: request.updatedAt,
       },
       data: {
@@ -429,14 +649,16 @@ export class ServiceRequestController {
       budgetMin: dto.budgetMin,
       budgetMax: dto.budgetMax,
     });
-    void this.matchProviders
-      .execute(request.id)
-      .catch((error) =>
-        this.logger.error(
-          `Matching failed for request ${request.id}`,
-          error instanceof Error ? error.stack : String(error),
-        ),
-      );
+    if (request.status === ServiceRequestStatus.OPEN) {
+      void this.matchProviders
+        .execute(request.id)
+        .catch((error) =>
+          this.logger.error(
+            `Matching failed for request ${request.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
+    }
     return ServiceRequestResponseDto.fromEntity(request);
   }
 
@@ -492,6 +714,7 @@ export class ServiceRequestController {
     title: string;
     description: string;
     status: string;
+    adminReviewNote?: string | null;
     address: string | null;
     latitude: number | null;
     longitude: number | null;
@@ -523,6 +746,7 @@ export class ServiceRequestController {
     acceptedProviderProfile: {
       id: string;
       rating: number;
+      avatarUrl: string | null;
       user: { name: string; phone: string };
     } | null;
     review: {
@@ -536,6 +760,7 @@ export class ServiceRequestController {
     const provider = request.acceptedProviderProfile;
     const status =
       {
+        PENDING_ADMIN_REVIEW: 'awaiting_admin_review',
         OPEN: 'awaiting_offers',
         OFFER_ACCEPTED: 'offers_received',
         CUSTOMER_CONFIRMATION_PENDING: 'awaiting_payment',
@@ -559,27 +784,29 @@ export class ServiceRequestController {
       longitude: request.longitude,
       createdAt: request.createdAt.toISOString(),
       scheduledAt: request.scheduledAt?.toISOString(),
+      adminReviewNote: request.adminReviewNote ?? null,
       customerConfirmationDeadline:
         request.customerConfirmationDeadline?.toISOString(),
       status,
-      dispute: request.disputeReason || request.status === 'DISPUTED'
-        ? {
-            reason: request.disputeReason,
-            description: request.disputeDescription,
-            updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
-            resolved: Boolean(request.disputeResolvedAt),
-            resolution: request.disputeResolution,
-            resolutionNote: request.disputeResolutionNote,
-            messages: request.disputeMessages.map((message) => ({
-              id: message.id,
-              body: message.body,
-              createdAt: message.createdAt.toISOString(),
-              authorId: message.author.id,
-              authorName: message.author.name,
-              authorRole: message.author.role,
-            })),
-          }
-        : null,
+      dispute:
+        request.disputeReason || request.status === 'DISPUTED'
+          ? {
+              reason: request.disputeReason,
+              description: request.disputeDescription,
+              updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
+              resolved: Boolean(request.disputeResolvedAt),
+              resolution: request.disputeResolution,
+              resolutionNote: request.disputeResolutionNote,
+              messages: request.disputeMessages.map((message) => ({
+                id: message.id,
+                body: message.body,
+                createdAt: message.createdAt.toISOString(),
+                authorId: message.author.id,
+                authorName: message.author.name,
+                authorRole: message.author.role,
+              })),
+            }
+          : null,
       offersCount: provider ? 1 : 0,
       budget:
         request.budgetMin !== null && request.budgetMax !== null
@@ -609,6 +836,7 @@ export class ServiceRequestController {
               request.specialty?.name ??
               request.skills.map((item) => item.skill.name).join('، '),
             rating: provider.rating,
+            avatarUrl: provider.avatarUrl,
             ...(request.payments.length ? { phone: provider.user.phone } : {}),
           }
         : undefined,

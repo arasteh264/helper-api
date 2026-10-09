@@ -5,8 +5,20 @@ import { ChatService } from './chat.service';
 type ChatPrismaMock = {
   serviceRequest: { findUnique: jest.Mock };
   providerProfile: { findUnique: jest.Mock };
-  chatConversation: { findUnique: jest.Mock; upsert: jest.Mock };
-  chatMessage: { count: jest.Mock; create: jest.Mock; findMany: jest.Mock };
+  chatConversation: {
+    findUnique: jest.Mock;
+    upsert: jest.Mock;
+    update: jest.Mock;
+  };
+  chatMessage: {
+    count: jest.Mock;
+    create: jest.Mock;
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    updateMany: jest.Mock;
+    findUniqueOrThrow: jest.Mock;
+  };
+  adminAuditLog: { create: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -14,8 +26,20 @@ function createFixture() {
   const prisma: ChatPrismaMock = {
     serviceRequest: { findUnique: jest.fn() },
     providerProfile: { findUnique: jest.fn() },
-    chatConversation: { findUnique: jest.fn(), upsert: jest.fn() },
-    chatMessage: { count: jest.fn(), create: jest.fn(), findMany: jest.fn() },
+    chatConversation: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      update: jest.fn(),
+    },
+    chatMessage: {
+      count: jest.fn(),
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+    },
+    adminAuditLog: { create: jest.fn() },
     $transaction: jest.fn(),
   };
   const notifications = {
@@ -134,5 +158,79 @@ describe('ChatService', () => {
     expect(prisma.chatMessage.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 20, take: 20 }),
     );
+  });
+
+  it('records conversation status changes atomically with the admin action', async () => {
+    const { prisma, service } = createFixture();
+    prisma.$transaction.mockImplementation(
+      (callback: (transaction: ChatPrismaMock) => unknown) => callback(prisma),
+    );
+    prisma.chatConversation.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      pausedReason: null,
+    });
+    prisma.chatConversation.update.mockResolvedValue({
+      id: 'conversation-1',
+      status: 'PAUSED',
+      pausedReason: 'درخواست بررسی',
+      updatedAt: new Date(),
+    });
+    prisma.adminAuditLog.create.mockResolvedValue({});
+
+    await service.setConversationStatus(
+      'conversation-1',
+      'admin-1',
+      'PAUSED',
+      'درخواست بررسی',
+    );
+
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorUserId: 'admin-1',
+        action: 'CHAT_CONVERSATION_STATUS_CHANGED',
+        targetType: 'CHAT',
+        targetId: 'conversation-1',
+        beforeState: { status: 'ACTIVE', pausedReason: null },
+        afterState: { status: 'PAUSED', pausedReason: 'درخواست بررسی' },
+      }),
+    });
+  });
+
+  it('records message moderation atomically with the admin action', async () => {
+    const { prisma, service } = createFixture();
+    prisma.$transaction.mockImplementation(
+      (callback: (transaction: ChatPrismaMock) => unknown) => callback(prisma),
+    );
+    prisma.chatMessage.findFirst.mockResolvedValue({
+      status: 'VISIBLE',
+      moderationNote: null,
+    });
+    prisma.chatMessage.updateMany.mockResolvedValue({ count: 1 });
+    prisma.chatMessage.findUniqueOrThrow.mockResolvedValue({
+      id: 'message-1',
+      status: 'HIDDEN',
+      sender: { id: 'customer-1', name: 'مشتری', role: 'CUSTOMER' },
+    });
+    prisma.adminAuditLog.create.mockResolvedValue({});
+
+    await service.moderateMessage(
+      'conversation-1',
+      'message-1',
+      'admin-1',
+      'HIDDEN',
+      'محتوای نامرتبط',
+    );
+
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorUserId: 'admin-1',
+        action: 'CHAT_MESSAGE_MODERATED',
+        targetType: 'CHAT',
+        targetId: 'message-1',
+        reason: 'محتوای نامرتبط',
+        beforeState: { status: 'VISIBLE', moderationNote: null },
+        afterState: { status: 'HIDDEN', moderationNote: 'محتوای نامرتبط' },
+      }),
+    });
   });
 });

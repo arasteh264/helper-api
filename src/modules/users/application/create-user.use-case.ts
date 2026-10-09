@@ -6,6 +6,11 @@ import { PASSWORD_HASHER } from '../domain/services/password-hasher.token';
 import type { OtpSender } from '../../auth/domain/services/otp-sender.port';
 import { OTP_SENDER } from '../../auth/domain/services/otp-sender.token';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { randomInt } from 'node:crypto';
+import {
+  OTP_TTL_SECONDS,
+  RedisOtpStore,
+} from '../../auth/infrastructure/services/redis-otp.store';
 
 interface CreateUserInput {
   name: string;
@@ -15,7 +20,7 @@ interface CreateUserInput {
 }
 
 function generateOtpCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 @Injectable()
@@ -28,6 +33,7 @@ export class CreateUserUseCase {
     @Inject(OTP_SENDER)
     private readonly otpSender: OtpSender,
     private readonly prisma: PrismaService,
+    private readonly otpStore: RedisOtpStore,
   ) {}
 
   async execute(input: CreateUserInput): Promise<void> {
@@ -49,26 +55,27 @@ export class CreateUserUseCase {
 
     const passwordHash = await this.passwordHasher.hash(input.password);
     const otpCode = generateOtpCode();
-    const otpExpiresAt = new Date(Date.now() + 90 * 1000);
-    
+
     await this.prisma.pendingRegistration.upsert({
       where: { phone: input.phone },
       update: {
         name: input.name,
         email: input.email,
         passwordHash,
-        otpCode,
-        otpExpiresAt,
       },
       create: {
         name: input.name,
         email: input.email,
         phone: input.phone,
         passwordHash,
-        otpCode,
-        otpExpiresAt,
       },
     });
-    await this.otpSender.send(input.email, otpCode, 90);
+    await this.otpStore.save('registration', input.phone, otpCode);
+    try {
+      await this.otpSender.send(input.email, otpCode, OTP_TTL_SECONDS);
+    } catch (error) {
+      await this.otpStore.delete('registration', input.phone);
+      throw error;
+    }
   }
 }

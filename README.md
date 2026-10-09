@@ -70,6 +70,30 @@ $ mau deploy
 
 With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
 
+## Redis cache
+
+Set `REDIS_URL` in the deployment environment to enable Redis. It is required
+for OTP operations, which store one-time codes in Redis for 90 seconds. Keep the
+URL in the hosting provider's secret environment settings; do not commit
+credentials.
+`REDIS_KEY_PREFIX` namespaces this application's keys, and
+`SPECIALTY_CACHE_TTL_SECONDS` controls the cache lifetime (60 seconds by
+default). The public specialty-group and specialty-list endpoints use this
+cache. Admin changes invalidate it. If Redis is unset or temporarily
+unavailable, specialty requests continue using PostgreSQL. OTP operations fail
+with a service-unavailable response if Redis is not configured or reachable.
+
+To move Redis providers or host Redis yourself, change `REDIS_URL` without
+changing application code.
+
+## Service request review
+
+New service requests are held for admin review by default. Admins can change
+this behavior from the service requests dashboard; approved requests are then
+matched with eligible specialists, while rejected requests retain the admin's
+reason for the customer to see. Apply the Prisma migration
+`20261009180000_add_admin_service_request_review` before deploying this feature.
+
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:
@@ -97,13 +121,10 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
-
 <!-- npx prisma studio -->
 
-
-
-
-<!-- watching table 
+<!-- watching table
 npx prisma studio -->
+
 admin@admin.com
 09198777391@H

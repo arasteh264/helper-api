@@ -244,4 +244,12 @@ export class AdminPaymentsController {
     }
     return this.paymentsService.listPayments(page, pageSize, status);
   }
+
+  @ApiOperation({
+    summary: 'Get payment processing details for administrator review',
+  })
+  @Get(':paymentId')
+  getDetails(@Param('paymentId') paymentId: string) {
+    return this.paymentsService.getAdminPaymentDetails(paymentId);
+  }
 }

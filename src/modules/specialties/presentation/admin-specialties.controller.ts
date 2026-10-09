@@ -19,8 +19,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { CurrentUser } from '../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/presentation/guards/jwt-auth.guard';
 import { AdminGuard } from '../../auth/presentation/guards/admin.guard';
+import type { TokenPayload } from '../../auth/domain/services/token-generator.port';
+import { PrismaService } from '../../../infrastructure/database/prisma.service';
 
 import { CreateSpecialtyGroupUseCase } from '../application/admin/create-specialty-group.use-case';
 import { UpdateSpecialtyGroupUseCase } from '../application/admin/update-specialty-group.use-case';
@@ -54,6 +57,7 @@ export class AdminSpecialtiesController {
     private readonly updateSpecialtyUseCase: UpdateSpecialtyUseCase,
     private readonly deleteSpecialtyUseCase: DeleteSpecialtyUseCase,
     private readonly getGroupedSpecialtiesUseCase: GetGroupedSpecialtiesUseCase,
+    private readonly prisma: PrismaService,
   ) {}
 
   @ApiOperation({ summary: 'List all specialty groups for administration' })
@@ -79,29 +83,48 @@ export class AdminSpecialtiesController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('icon', ICON_UPLOAD_OPTIONS))
   @Post('groups')
-  createGroup(
+  async createGroup(
+    @CurrentUser() admin: TokenPayload,
     @Body() dto: CreateSpecialtyGroupDto,
     @UploadedFile() icon?: Express.Multer.File,
   ) {
-    return this.createGroupUseCase.execute({
+    const group = await this.createGroupUseCase.execute({
       name: dto.name,
       slug: dto.slug,
       sortOrder: dto.sortOrder,
       isActive: dto.isActive,
       iconFile: icon,
     });
+    await this.recordAction(
+      admin.userId,
+      'SPECIALTY_GROUP_CREATED',
+      group.id,
+      null,
+      {
+        name: group.name,
+        slug: group.slug,
+        sortOrder: group.sortOrder,
+        isActive: group.isActive,
+      },
+    );
+    return group;
   }
 
   @ApiOperation({ summary: 'Update a specialty group' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('icon', ICON_UPLOAD_OPTIONS))
   @Patch('groups/:id')
-  updateGroup(
+  async updateGroup(
+    @CurrentUser() admin: TokenPayload,
     @Param('id') id: string,
     @Body() dto: UpdateSpecialtyGroupDto,
     @UploadedFile() icon?: Express.Multer.File,
   ) {
-    return this.updateGroupUseCase.execute({
+    const before = await this.prisma.specialtyGroup.findUnique({
+      where: { id },
+      select: { name: true, slug: true, sortOrder: true, isActive: true },
+    });
+    const group = await this.updateGroupUseCase.execute({
       id,
       name: dto.name,
       slug: dto.slug,
@@ -109,23 +132,52 @@ export class AdminSpecialtiesController {
       isActive: dto.isActive,
       iconFile: icon,
     });
+    await this.recordAction(
+      admin.userId,
+      'SPECIALTY_GROUP_UPDATED',
+      id,
+      before,
+      {
+        name: group.name,
+        slug: group.slug,
+        sortOrder: group.sortOrder,
+        isActive: group.isActive,
+      },
+    );
+    return group;
   }
 
   @ApiOperation({ summary: 'Delete a specialty group' })
   @Delete('groups/:id')
-  deleteGroup(@Param('id') id: string) {
-    return this.deleteGroupUseCase.execute(id);
+  async deleteGroup(
+    @CurrentUser() admin: TokenPayload,
+    @Param('id') id: string,
+  ) {
+    const before = await this.prisma.specialtyGroup.findUnique({
+      where: { id },
+      select: { name: true, slug: true, sortOrder: true, isActive: true },
+    });
+    await this.deleteGroupUseCase.execute(id);
+    await this.recordAction(
+      admin.userId,
+      'SPECIALTY_GROUP_DELETED',
+      id,
+      before,
+      null,
+    );
+    return { deleted: true };
   }
 
   @ApiOperation({ summary: 'Create a specialty' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('icon', ICON_UPLOAD_OPTIONS))
   @Post()
-  createSpecialty(
+  async createSpecialty(
+    @CurrentUser() admin: TokenPayload,
     @Body() dto: CreateSpecialtyDto,
     @UploadedFile() icon?: Express.Multer.File,
   ) {
-    return this.createSpecialtyUseCase.execute({
+    const specialty = await this.createSpecialtyUseCase.execute({
       groupId: dto.groupId,
       name: dto.name,
       slug: dto.slug,
@@ -136,18 +188,47 @@ export class AdminSpecialtiesController {
       hourlyRateToman: dto.hourlyRateToman,
       hourlyUnitLabel: dto.hourlyUnitLabel,
     });
+    await this.recordAction(
+      admin.userId,
+      'SPECIALTY_CREATED',
+      specialty.id,
+      null,
+      {
+        name: specialty.name,
+        slug: specialty.slug,
+        groupId: specialty.groupId,
+        sortOrder: specialty.sortOrder,
+        isActive: specialty.isActive,
+        pricingMode: specialty.pricingMode,
+        hourlyRateToman: specialty.hourlyRateToman,
+      },
+    );
+    return specialty;
   }
 
   @ApiOperation({ summary: 'Update a specialty' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('icon', ICON_UPLOAD_OPTIONS))
   @Patch(':id')
-  updateSpecialty(
+  async updateSpecialty(
+    @CurrentUser() admin: TokenPayload,
     @Param('id') id: string,
     @Body() dto: UpdateSpecialtyDto,
     @UploadedFile() icon?: Express.Multer.File,
   ) {
-    return this.updateSpecialtyUseCase.execute({
+    const before = await this.prisma.specialty.findUnique({
+      where: { id },
+      select: {
+        name: true,
+        slug: true,
+        groupId: true,
+        sortOrder: true,
+        isActive: true,
+        pricingMode: true,
+        hourlyRateToman: true,
+      },
+    });
+    const specialty = await this.updateSpecialtyUseCase.execute({
       id,
       groupId: dto.groupId,
       name: dto.name,
@@ -159,11 +240,64 @@ export class AdminSpecialtiesController {
       hourlyRateToman: dto.hourlyRateToman,
       hourlyUnitLabel: dto.hourlyUnitLabel,
     });
+    await this.recordAction(admin.userId, 'SPECIALTY_UPDATED', id, before, {
+      name: specialty.name,
+      slug: specialty.slug,
+      groupId: specialty.groupId,
+      sortOrder: specialty.sortOrder,
+      isActive: specialty.isActive,
+      pricingMode: specialty.pricingMode,
+      hourlyRateToman: specialty.hourlyRateToman,
+    });
+    return specialty;
   }
 
   @ApiOperation({ summary: 'Delete a specialty' })
   @Delete(':id')
-  deleteSpecialty(@Param('id') id: string) {
-    return this.deleteSpecialtyUseCase.execute(id);
+  async deleteSpecialty(
+    @CurrentUser() admin: TokenPayload,
+    @Param('id') id: string,
+  ) {
+    const before = await this.prisma.specialty.findUnique({
+      where: { id },
+      select: {
+        name: true,
+        slug: true,
+        groupId: true,
+        sortOrder: true,
+        isActive: true,
+        pricingMode: true,
+        hourlyRateToman: true,
+      },
+    });
+    await this.deleteSpecialtyUseCase.execute(id);
+    await this.recordAction(
+      admin.userId,
+      'SPECIALTY_DELETED',
+      id,
+      before,
+      null,
+    );
+    return { deleted: true };
+  }
+
+  private recordAction(
+    actorUserId: string,
+    action: string,
+    targetId: string,
+    beforeState: Record<string, string | number | boolean | null> | null,
+    afterState: Record<string, string | number | boolean | null> | null,
+  ) {
+    return this.prisma.adminAuditLog.create({
+      data: {
+        actorUserId,
+        action,
+        targetType: 'SPECIALTY',
+        targetId,
+        reason: 'مدیر تنظیمات گروه‌ها و تخصص‌ها را تغییر داد',
+        beforeState: beforeState ?? undefined,
+        afterState: afterState ?? undefined,
+      },
+    });
   }
 }

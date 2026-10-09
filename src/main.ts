@@ -7,16 +7,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-const configuredOrigins = [
-  'https://helper-customer.vercel.app',
-  'https://helper-admin-panel.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  ...(process.env.CORS_ORIGINS ?? '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
-];
+  const configuredOrigins = [
+    'https://helper-customer.vercel.app',
+    'https://helper-admin-panel.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    ...(process.env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  ];
 
   app.enableCors({
     origin: (origin, callback) => {
@@ -39,6 +39,7 @@ const configuredOrigins = [
       callback(null, isAllowedOrigin);
     },
     credentials: true,
+    exposedHeaders: ['X-Export-Truncated'],
   });
   app.useGlobalPipes(
     new ValidationPipe({

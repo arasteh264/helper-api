@@ -73,7 +73,6 @@ model User {
   email                  String                         @unique
   phone                  String                         @unique
   passwordHash           String?
-  googleId               String?                        @unique
   role                   UserRole
   status                 UserStatus
   resetToken             String?
@@ -92,6 +91,25 @@ model User {
   notificationPreference NotificationPreference?
   notifications          Notification[]
   disputeMessages        ServiceRequestDisputeMessage[]
+  adminActions           AdminAuditLog[]                @relation("AdminAuditActor")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  action      String
+  targetType  String
+  targetId    String
+  reason      String   @db.Text
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
 }
 
 model BlogPost {
@@ -172,8 +190,8 @@ model PendingRegistration {
   email        String   @unique
   phone        String   @unique
   passwordHash String
-  otpCode      String
-  otpExpiresAt DateTime
+  otpCode      String?
+  otpExpiresAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -309,6 +327,7 @@ model ProviderSkill {
 }
 
 enum ServiceRequestStatus {
+  PENDING_ADMIN_REVIEW
   OPEN
   OFFER_ACCEPTED
   CUSTOMER_CONFIRMATION_PENDING
@@ -361,6 +380,7 @@ model ServiceRequest {
   disputeReason                DisputeReason?
   disputeDescription           String?               @db.Text
   disputeUpdatedAt             DateTime?
+  adminReviewNote              String?               @db.Text
 
   address   String?
   latitude  Float?
@@ -645,6 +665,7 @@ model WalletConfiguration {
   id             String   @id @default("global")
   commissionRate Float    @default(10)
   minWithdrawal  Int      @default(100000)
+  requireServiceRequestReview Boolean @default(true)
   updatedAt      DateTime @updatedAt
 }
 
@@ -660,6 +681,9 @@ model ProviderRequestInvitation {
   providerProfileId String
   serviceRequestId  String
   status            ProviderInvitationStatus @default(PENDING)
+  proposedPriceToman Int?
+  quoteNote         String?                  @db.Text
+  estimatedHours    Float?
   createdAt         DateTime                 @default(now())
   respondedAt       DateTime?
   distanceKm        Float?

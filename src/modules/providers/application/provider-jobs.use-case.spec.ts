@@ -55,17 +55,18 @@ function createFixture(pricingMode: 'QUOTE' | 'HOURLY', rate: number | null) {
   };
 }
 
-describe('ProviderJobsUseCase.accept', () => {
-  it('uses the admin hourly rate and provider estimate for hourly specialties', async () => {
+describe('ProviderJobsUseCase.submitQuote', () => {
+  it('stores an hourly quote on the invitation without assigning the request', async () => {
     const { useCase, transaction, notifications } = createFixture(
       'HOURLY',
       300000,
     );
 
-    const result = await useCase.accept(
+    const result = await useCase.submitQuote(
       'provider-user',
       'request-1',
       undefined,
+      'برآورد بر اساس زمان کار',
       2.5,
     );
 
@@ -76,16 +77,24 @@ describe('ProviderJobsUseCase.accept', () => {
       hourlyUnitLabel: 'ساعت',
       estimatedHours: 2.5,
     });
-    expect(transaction.serviceRequest.updateMany).toHaveBeenCalledWith(
+    expect(transaction.serviceRequest.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          providerPriceToman: 750000,
-          providerHourlyRateToman: 300000,
-          providerHourlyUnitLabel: 'ساعت',
-          providerEstimatedHours: 2.5,
-        }),
+        where: {
+          id: 'request-1',
+          status: 'OPEN',
+          acceptedProviderProfileId: null,
+        },
       }),
     );
+    expect(transaction.providerRequestInvitation.update).toHaveBeenCalledWith({
+      where: { id: 'invitation-1' },
+      data: {
+        proposedPriceToman: 750000,
+        quoteNote: 'برآورد بر اساس زمان کار',
+        estimatedHours: 2.5,
+      },
+    });
+    expect(transaction.serviceRequest.updateMany).not.toHaveBeenCalled();
     expect(notifications.createForUser).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'customer-user',
@@ -94,10 +103,15 @@ describe('ProviderJobsUseCase.accept', () => {
     );
   });
 
-  it('uses the provider proposal for quote-based specialties', async () => {
+  it('stores a fixed-price quote and details on the invitation', async () => {
     const { useCase, transaction } = createFixture('QUOTE', null);
 
-    const result = await useCase.accept('provider-user', 'request-1', 850000);
+    const result = await useCase.submitQuote(
+      'provider-user',
+      'request-1',
+      850000,
+      'هزینه شامل قطعات نیست',
+    );
 
     expect(result).toMatchObject({
       proposedPriceToman: 850000,
@@ -105,14 +119,15 @@ describe('ProviderJobsUseCase.accept', () => {
       hourlyRateToman: null,
       estimatedHours: null,
     });
-    expect(transaction.serviceRequest.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          providerPriceToman: 850000,
-          providerPricingMode: 'QUOTE',
-        }),
-      }),
-    );
+    expect(transaction.providerRequestInvitation.update).toHaveBeenCalledWith({
+      where: { id: 'invitation-1' },
+      data: {
+        proposedPriceToman: 850000,
+        quoteNote: 'هزینه شامل قطعات نیست',
+        estimatedHours: null,
+      },
+    });
+    expect(transaction.serviceRequest.updateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -21,7 +21,11 @@ export class UpdateWalletCommissionRateUseCase {
     private readonly walletRepository: WalletRepository,
   ) {}
 
-  execute(rate: number) {
-    return this.walletRepository.updateCommissionRate(rate);
+  execute(rate: number, adminUserId: string, reason: string) {
+    return this.walletRepository.updateCommissionRate(
+      rate,
+      adminUserId,
+      reason,
+    );
   }
 }

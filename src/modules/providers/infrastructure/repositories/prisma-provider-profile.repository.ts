@@ -36,9 +36,18 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     });
   }
 
-  async update(profile: ProviderProfile): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.providerProfile.update({
+  async update(
+    profile: ProviderProfile,
+    audit?: {
+      actorUserId: string;
+      action: string;
+      reason: string;
+      beforeState: Record<string, string | number | boolean | null>;
+      afterState: Record<string, string | number | boolean | null>;
+    },
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.providerProfile.update({
         where: { id: profile.id },
         data: {
           bio: profile.bio,
@@ -57,18 +66,31 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           providerAddressType: profile.providerAddressType,
           updatedAt: profile.updatedAt,
         },
-      }),
-      this.prisma.providerSkill.deleteMany({
+      });
+      await tx.providerSkill.deleteMany({
         where: { providerProfileId: profile.id },
-      }),
-      this.prisma.providerSkill.createMany({
+      });
+      await tx.providerSkill.createMany({
         data: profile.skillIds.map((skillId) => ({
           providerProfileId: profile.id,
           skillId,
         })),
         skipDuplicates: true,
-      }),
-    ]);
+      });
+      if (audit) {
+        await tx.adminAuditLog.create({
+          data: {
+            actorUserId: audit.actorUserId,
+            action: audit.action,
+            targetType: 'PROVIDER',
+            targetId: profile.id,
+            reason: audit.reason,
+            beforeState: audit.beforeState,
+            afterState: audit.afterState,
+          },
+        });
+      }
+    });
   }
 
   async findByUserId(userId: string): Promise<ProviderProfile | null> {
@@ -115,6 +137,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     const rows = await this.prisma.providerProfile.findMany({
       where: {
         verificationStatus: 'APPROVED' as any,
+        user: { status: 'ACTIVE' },
       },
       include: {
         skills: true,
@@ -138,7 +161,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     const p = await this.prisma.providerProfile.findUnique({
       where: { userId },
       include: {
-        user: { select: { name: true, email: true, phone: true } },
+        user: {
+          select: { name: true, email: true, phone: true, status: true },
+        },
         skills: { include: { skill: true } },
         specialties: { include: { specialty: { include: { group: true } } } },
       },
@@ -182,6 +207,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       where: {
         verificationStatus: 'APPROVED' as any,
         isAvailable: true,
+        user: { status: 'ACTIVE' },
         skills: { some: { skillId: { in: skillIds } } },
       },
       include: { skills: true },
@@ -240,7 +266,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
               },
             },
           }
-
         : {}),
     };
 
@@ -251,7 +276,9 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         take: input.take,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
-          user: { select: { name: true, email: true, phone: true } },
+          user: {
+            select: { name: true, email: true, phone: true, status: true },
+          },
           skills: { include: { skill: true } },
           specialties: { include: { specialty: { include: { group: true } } } },
         },
@@ -307,7 +334,11 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         select: { createdAt: true },
       }),
       this.prisma.providerProfile.findMany({
-        where: { verificationStatus: 'APPROVED', rating: { gt: 0 } },
+        where: {
+          verificationStatus: 'APPROVED',
+          rating: { gt: 0 },
+          user: { status: 'ACTIVE' },
+        },
         select: {
           id: true,
           rating: true,
@@ -323,7 +354,10 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
           status: 'COMPLETED',
           acceptedProviderProfileId: { not: null },
           acceptedProviderProfile: {
-            is: { verificationStatus: 'APPROVED' },
+            is: {
+              verificationStatus: 'APPROVED',
+              user: { is: { status: 'ACTIVE' } },
+            },
           },
         },
         _count: { id: true },
@@ -374,6 +408,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     const rows = await this.prisma.providerProfile.findMany({
       where: {
         verificationStatus: 'APPROVED' as any,
+        user: { status: 'ACTIVE' },
       },
       include: {
         user: {
@@ -381,6 +416,7 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
             name: true,
             email: true,
             phone: true,
+            status: true,
           },
         },
         skills: {
@@ -429,7 +465,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         groupId: specialty.groupId,
         groupName: specialty.group.name,
       })),
-
     }));
   }
 

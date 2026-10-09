@@ -576,6 +576,7 @@ describe('PaymentsService', () => {
     };
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
+      adminAuditLog: { create: jest.fn().mockResolvedValue({}) },
       serviceRequest: {
         findFirst: jest.fn().mockResolvedValue(disputed),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -617,6 +618,15 @@ describe('PaymentsService', () => {
         }),
       }),
     );
+    expect(tx.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorUserId: 'admin-1',
+        action: 'DISPUTE_RESOLVED',
+        targetType: 'SERVICE_REQUEST',
+        targetId: 'request-1',
+        reason: 'مشتری وجه توافق‌شده را پرداخت نکرده است',
+      }),
+    });
     expect(notifications.createForUser).toHaveBeenCalledTimes(2);
   });
 
@@ -670,6 +680,7 @@ describe('PaymentsService', () => {
     };
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
+      adminAuditLog: { create: jest.fn().mockResolvedValue({}) },
       serviceRequest: {
         findFirst: jest
           .fn()
@@ -741,6 +752,19 @@ describe('PaymentsService', () => {
         gateway: 'WALLET',
         status: 'PAID',
         amountToman: 300000,
+      }),
+    });
+    expect(tx.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorUserId: 'admin-1',
+        action: 'DISPUTE_RESOLVED',
+        targetType: 'SERVICE_REQUEST',
+        targetId: 'request-1',
+        reason: 'مدرک کافی برای انجام کار ارائه نشده است',
+        afterState: expect.objectContaining({
+          resolution: 'BUYER',
+          refundDestination: 'CUSTOMER_WALLET',
+        }),
       }),
     });
     expect(result).toEqual({

@@ -10,9 +10,6 @@ export class User {
     private _role: UserRole,
     private _status: UserStatus,
     private _passwordHash: string | null,
-    private _googleId: string | null,
-    private _otpCode: string | null,
-    private _otpExpiresAt: Date | null,
     private _resetToken: string | null,
     private _resetTokenExpiry: Date | null,
     public readonly createdAt: Date,
@@ -37,9 +34,6 @@ export class User {
       passwordHash,
       null,
       null,
-      null,
-      null,
-      null,
       now,
       now,
     );
@@ -50,8 +44,6 @@ export class User {
     email: string,
     phone: string,
     passwordHash: string | null,
-    otpCode: string,
-    otpExpiresAt: Date,
   ): User {
     const now = new Date();
 
@@ -63,9 +55,6 @@ export class User {
       UserRole.CUSTOMER,
       UserStatus.INACTIVE,
       passwordHash,
-      null,
-      otpCode,
-      otpExpiresAt,
       null,
       null,
       now,
@@ -81,9 +70,6 @@ export class User {
     role: UserRole,
     status: UserStatus,
     passwordHash: string | null,
-    googleId: string | null,
-    otpCode: string | null,
-    otpExpiresAt: Date | null,
     resetToken: string | null,
     resetTokenExpiry: Date | null,
     createdAt: Date,
@@ -97,9 +83,6 @@ export class User {
       role,
       status,
       passwordHash,
-      googleId,
-      otpCode,
-      otpExpiresAt,
       resetToken,
       resetTokenExpiry,
       createdAt,
@@ -118,15 +101,6 @@ export class User {
   }
   get passwordHash(): string | null {
     return this._passwordHash;
-  }
-  get googleId(): string | null {
-    return this._googleId;
-  }
-  get otpCode(): string | null {
-    return this._otpCode;
-  }
-  get otpExpiresAt(): Date | null {
-    return this._otpExpiresAt;
   }
   get resetToken(): string | null {
     return this._resetToken;
@@ -184,27 +158,6 @@ export class User {
     this._updatedAt = new Date();
   }
 
-  setOtp(code: string, expiresAt: Date): void {
-    this._otpCode = code;
-    this._otpExpiresAt = expiresAt;
-    this._updatedAt = new Date();
-  }
-
-  clearOtp(): void {
-    this._otpCode = null;
-    this._otpExpiresAt = null;
-    this._updatedAt = new Date();
-  }
-
-  isOtpValid(code: string): boolean {
-    if (!this._otpCode || !this._otpExpiresAt) {
-      return false;
-    }
-    if (this._otpCode !== code) {
-      return false;
-    }
-    return this._otpExpiresAt.getTime() > Date.now();
-  }
   setResetToken(token: string, expiresAt: Date): void {
     this._resetToken = token;
     this._resetTokenExpiry = expiresAt;

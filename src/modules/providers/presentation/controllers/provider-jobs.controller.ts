@@ -4,7 +4,7 @@ import { CurrentUser } from '../../../auth/presentation/decorators/current-user.
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import type { TokenPayload } from '../../../auth/domain/services/token-generator.port';
 import { ProviderJobsUseCase } from '../../application/provider-jobs.use-case';
-import { AcceptServiceRequestDto } from '../../application/dto/accept-service-request.dto';
+import { SubmitServiceRequestQuoteDto } from '../../application/dto/submit-service-request-quote.dto';
 import { CreateServiceRequestDisputeMessageDto } from '../../../payments/dto/create-service-request-dispute-message.dto';
 import { RaiseProviderNonPaymentDisputeDto } from '../../application/dto/raise-provider-non-payment-dispute.dto';
 
@@ -21,17 +21,34 @@ export class ProviderJobsController {
     return this.providerJobsUseCase.list(user.userId);
   }
 
-  @ApiOperation({ summary: 'Accept a service request' })
+  @ApiOperation({ summary: 'Submit or update a price quote for a service request' })
+  @Post(':requestId/quote')
+  quote(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+    @Body() dto: SubmitServiceRequestQuoteDto,
+  ) {
+    return this.providerJobsUseCase.submitQuote(
+      user.userId,
+      requestId,
+      dto.proposedPriceToman,
+      dto.quoteNote,
+      dto.estimatedHours,
+    );
+  }
+
+  @ApiOperation({ summary: 'Submit a price quote (legacy route)' })
   @Post(':requestId/accept')
   accept(
     @CurrentUser() user: TokenPayload,
     @Param('requestId') requestId: string,
-    @Body() dto: AcceptServiceRequestDto,
+    @Body() dto: SubmitServiceRequestQuoteDto,
   ) {
-    return this.providerJobsUseCase.accept(
+    return this.providerJobsUseCase.submitQuote(
       user.userId,
       requestId,
       dto.proposedPriceToman,
+      dto.quoteNote,
       dto.estimatedHours,
     );
   }

@@ -198,18 +198,48 @@ export class ChatService {
 
   async setConversationStatus(
     conversationId: string,
+    adminUserId: string,
     status: 'ACTIVE' | 'PAUSED' | 'CLOSED',
     pausedReason?: string,
   ) {
     try {
-      return await this.prisma.chatConversation.update({
-        where: { id: conversationId },
-        data: {
-          status,
-          pausedReason:
-            status === 'PAUSED' ? pausedReason?.trim() || null : null,
-        },
-        select: { id: true, status: true, pausedReason: true, updatedAt: true },
+      return await this.prisma.$transaction(async (tx) => {
+        const previous = await tx.chatConversation.findUnique({
+          where: { id: conversationId },
+          select: { status: true, pausedReason: true },
+        });
+        if (!previous) throw new NotFoundException('گفتگو پیدا نشد');
+        const updated = await tx.chatConversation.update({
+          where: { id: conversationId },
+          data: {
+            status,
+            pausedReason:
+              status === 'PAUSED' ? pausedReason?.trim() || null : null,
+          },
+          select: {
+            id: true,
+            status: true,
+            pausedReason: true,
+            updatedAt: true,
+          },
+        });
+        await tx.adminAuditLog.create({
+          data: {
+            actorUserId: adminUserId,
+            action: 'CHAT_CONVERSATION_STATUS_CHANGED',
+            targetType: 'CHAT',
+            targetId: conversationId,
+            reason:
+              pausedReason?.trim() ||
+              'وضعیت گفتگوی پشتیبانی توسط مدیر تغییر کرد',
+            beforeState: previous,
+            afterState: {
+              status: updated.status,
+              pausedReason: updated.pausedReason,
+            },
+          },
+        });
+        return updated;
       });
     } catch (error) {
       if ((error as { code?: string })?.code === 'P2025') {
@@ -226,19 +256,38 @@ export class ChatService {
     status: 'VISIBLE' | 'HIDDEN',
     note?: string,
   ) {
-    const result = await this.prisma.chatMessage.updateMany({
-      where: { id: messageId, conversationId },
-      data: {
-        status,
-        moderatedById: adminUserId,
-        moderationNote: note?.trim() || null,
-        moderatedAt: new Date(),
-      },
-    });
-    if (!result.count) throw new NotFoundException('پیام پیدا نشد');
-    return this.prisma.chatMessage.findUniqueOrThrow({
-      where: { id: messageId },
-      include: { sender: { select: { id: true, name: true, role: true } } },
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await tx.chatMessage.findFirst({
+        where: { id: messageId, conversationId },
+        select: { status: true, moderationNote: true },
+      });
+      if (!previous) throw new NotFoundException('پیام پیدا نشد');
+      const result = await tx.chatMessage.updateMany({
+        where: { id: messageId, conversationId },
+        data: {
+          status,
+          moderatedById: adminUserId,
+          moderationNote: note?.trim() || null,
+          moderatedAt: new Date(),
+        },
+      });
+      if (!result.count) throw new NotFoundException('پیام پیدا نشد');
+      const message = await tx.chatMessage.findUniqueOrThrow({
+        where: { id: messageId },
+        include: { sender: { select: { id: true, name: true, role: true } } },
+      });
+      await tx.adminAuditLog.create({
+        data: {
+          actorUserId: adminUserId,
+          action: 'CHAT_MESSAGE_MODERATED',
+          targetType: 'CHAT',
+          targetId: messageId,
+          reason: note?.trim() || 'پیام گفتگو توسط مدیر بررسی شد',
+          beforeState: previous,
+          afterState: { status, moderationNote: note?.trim() || null },
+        },
+      });
+      return message;
     });
   }
 

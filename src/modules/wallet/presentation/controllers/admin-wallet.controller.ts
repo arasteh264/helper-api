@@ -35,6 +35,7 @@ import {
   ListPayoutRequestsUseCase,
   ReviewPayoutRequestUseCase,
 } from '../../application/admin-wallet-accounting.use-cases';
+import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 
 @ApiTags('Admin - Wallets')
 @ApiBearerAuth()
@@ -51,6 +52,7 @@ export class AdminWalletController {
     private readonly listPayoutRequestsUseCase: ListPayoutRequestsUseCase,
     private readonly listPlatformWalletTransactionsUseCase: ListPlatformWalletTransactionsUseCase,
     private readonly reviewPayoutRequestUseCase: ReviewPayoutRequestUseCase,
+    private readonly prisma: PrismaService,
   ) {}
 
   @ApiOperation({ summary: 'Get platform wallet configuration' })
@@ -61,8 +63,15 @@ export class AdminWalletController {
 
   @ApiOperation({ summary: 'Update platform commission rate' })
   @Put('configuration/commission')
-  updateCommissionRate(@Body() dto: UpdateCommissionRateDto) {
-    return this.updateWalletCommissionRateUseCase.execute(dto.commissionRate);
+  updateCommissionRate(
+    @CurrentUser() admin: TokenPayload,
+    @Body() dto: UpdateCommissionRateDto,
+  ) {
+    return this.updateWalletCommissionRateUseCase.execute(
+      dto.commissionRate,
+      admin.userId,
+      dto.reason,
+    );
   }
 
   @ApiOperation({ summary: 'Get platform accounting summary' })
@@ -125,18 +134,58 @@ export class AdminWalletController {
   @ApiOperation({ summary: 'Set or update provider payout bank account' })
   @Put(':providerProfileId/bank-account')
   updateProviderBankAccount(
+    @CurrentUser() admin: TokenPayload,
     @Param('providerProfileId') providerProfileId: string,
     @Body() dto: UpsertBankAccountDto,
   ) {
-    return this.upsertBankAccountUseCase.executeForProviderProfile(
-      providerProfileId,
-      dto,
-    );
+    return this.updateBankAccount(admin.userId, providerProfileId, dto);
+  }
+
+  private async updateBankAccount(
+    adminUserId: string,
+    providerProfileId: string,
+    dto: UpsertBankAccountDto,
+  ) {
+    const before =
+      await this.getBankAccountUseCase.executeForProviderProfile(
+        providerProfileId,
+      );
+    const updated =
+      await this.upsertBankAccountUseCase.executeForProviderProfile(
+        providerProfileId,
+        dto,
+      );
+    await this.prisma.adminAuditLog.create({
+      data: {
+        actorUserId: adminUserId,
+        action: 'PROVIDER_BANK_ACCOUNT_UPDATED',
+        targetType: 'PROVIDER',
+        targetId: providerProfileId,
+        reason: 'اطلاعات حساب بانکی متخصص توسط مدیر ویرایش شد',
+        beforeState: this.maskBankAccount(before),
+        afterState: this.maskBankAccount(updated),
+      },
+    });
+    return updated;
+  }
+
+  private maskBankAccount(
+    account: Awaited<
+      ReturnType<GetBankAccountUseCase['executeForProviderProfile']>
+    >,
+  ) {
+    return account
+      ? {
+          bankName: account.bankName,
+          shebaLastFour: account.sheba.slice(-4),
+        }
+      : undefined;
   }
 
   @ApiOperation({ summary: 'Manually credit a provider wallet (adjustment)' })
   @Post(':providerProfileId/credit')
   async credit(
+    @CurrentUser() admin: TokenPayload,
     @Param('providerProfileId') providerProfileId: string,
     @Body() dto: AdminCreditWalletDto,
   ) {
@@ -144,6 +193,7 @@ export class AdminWalletController {
       providerProfileId,
       amount: dto.amount,
       type: WalletTransactionType.ADJUSTMENT,
+      adminUserId: admin.userId,
       description: dto.description,
     });
 

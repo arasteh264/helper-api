@@ -53,11 +53,13 @@ export class AdminChatController {
   @ApiOperation({ summary: 'Pause, resume or close a conversation' })
   @Patch(':conversationId')
   setConversationStatus(
+    @CurrentUser() admin: TokenPayload,
     @Param('conversationId') conversationId: string,
     @Body() dto: UpdateChatConversationDto,
   ) {
     return this.chatService.setConversationStatus(
       conversationId,
+      admin.userId,
       dto.status,
       dto.pausedReason,
     );

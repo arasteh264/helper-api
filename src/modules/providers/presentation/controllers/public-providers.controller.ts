@@ -6,7 +6,7 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 
 const publicProviderListInclude = {
@@ -152,11 +152,50 @@ export class PublicProvidersController {
   }
 
   @ApiOperation({ summary: 'Get an approved provider profile' })
+  @ApiQuery({ name: 'latitude', required: false, type: Number })
+  @ApiQuery({ name: 'longitude', required: false, type: Number })
   @Get(':providerProfileId')
-  async getOne(@Param('providerProfileId') providerProfileId: string) {
+  async getOne(
+    @Param('providerProfileId') providerProfileId: string,
+    @Query('latitude') latitudeText?: string,
+    @Query('longitude') longitudeText?: string,
+  ) {
+    const hasLatitude = latitudeText !== undefined;
+    const hasLongitude = longitudeText !== undefined;
+    if (hasLatitude !== hasLongitude) {
+      throw new BadRequestException('موقعیت واردشده معتبر نیست');
+    }
+
+    const latitude = hasLatitude ? Number(latitudeText) : null;
+    const longitude = hasLongitude ? Number(longitudeText) : null;
+    if (
+      latitude !== null &&
+      longitude !== null &&
+      (!Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180)
+    ) {
+      throw new BadRequestException('موقعیت واردشده معتبر نیست');
+    }
+
     const provider = await findPublicProvider(this.prisma, providerProfileId);
     if (!provider) throw new NotFoundException('متخصص پیدا نشد');
-    return this.toPublicProfile(provider);
+    const distanceKm =
+      latitude !== null &&
+      longitude !== null &&
+      provider.serviceAreaLatitude !== null &&
+      provider.serviceAreaLongitude !== null
+        ? this.distanceKm(
+            latitude,
+            longitude,
+            provider.serviceAreaLatitude,
+            provider.serviceAreaLongitude,
+          )
+        : null;
+    return { ...this.toPublicProfile(provider), distanceKm };
   }
 
   private toPublicProfile(provider: PublicProvider) {
@@ -173,6 +212,7 @@ export class PublicProvidersController {
       hasServiceArea:
         provider.serviceAreaLatitude !== null &&
         provider.serviceAreaLongitude !== null,
+      serviceAreaRadiusKm: provider.serviceAreaRadiusKm,
       skills: provider.skills.map((item) => ({
         id: item.skill.id,
         name: item.skill.name,

@@ -33,7 +33,14 @@ export class ProviderJobsUseCase {
         include: {
           serviceRequest: {
             include: {
-              specialty: { select: { name: true } },
+              specialty: {
+                select: {
+                  name: true,
+                  pricingMode: true,
+                  hourlyRateToman: true,
+                  hourlyUnitLabel: true,
+                },
+              },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
               payments: {
@@ -72,7 +79,14 @@ export class ProviderJobsUseCase {
           },
         },
         include: {
-          specialty: { select: { name: true } },
+          specialty: {
+            select: {
+              name: true,
+              pricingMode: true,
+              hourlyRateToman: true,
+              hourlyUnitLabel: true,
+            },
+          },
           skills: { include: { skill: true } },
           images: { select: { url: true } },
           payments: {
@@ -97,7 +111,14 @@ export class ProviderJobsUseCase {
         include: {
           serviceRequest: {
             include: {
-              specialty: { select: { name: true } },
+              specialty: {
+                select: {
+                  name: true,
+                  pricingMode: true,
+                  hourlyRateToman: true,
+                  hourlyUnitLabel: true,
+                },
+              },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
               payments: {
@@ -112,21 +133,21 @@ export class ProviderJobsUseCase {
       }),
     ]);
 
-    const declinedRequests = declinedInvitations.map(
-      (invitation) => invitation.serviceRequest,
-    );
     const records = [
       ...invitations.map((invitation) => ({
         request: invitation.serviceRequest,
         viewStatus: 'new' as const,
+        invitation,
       })),
-      ...declinedRequests.map((request) => ({
-        request,
+      ...declinedInvitations.map((invitation) => ({
+        request: invitation.serviceRequest,
         viewStatus: 'declined' as const,
+        invitation,
       })),
       ...assigned.map((request) => ({
         request,
         viewStatus: this.toViewStatus(request.status),
+        invitation: null,
       })),
     ];
     const customerIds = [
@@ -142,7 +163,7 @@ export class ProviderJobsUseCase {
       customers.map((customer) => [customer.id, customer]),
     );
 
-    return records.map(({ request, viewStatus }) => {
+    return records.map(({ request, viewStatus, invitation }) => {
       const customer = customerById.get(request.customerId);
       const canSeeAddress =
         viewStatus === 'accepted' ||
@@ -163,14 +184,27 @@ export class ProviderJobsUseCase {
           : 'آدرس پس از پرداخت نمایش داده می‌شود',
         scheduledAt: (request.scheduledAt ?? request.createdAt).toISOString(),
         price:
+          invitation?.proposedPriceToman ??
           request.providerPriceToman ??
           request.budgetMax ??
           request.budgetMin ??
           0,
-        pricingMode: request.providerPricingMode,
-        hourlyRateToman: request.providerHourlyRateToman,
-        hourlyUnitLabel: request.providerHourlyUnitLabel,
-        estimatedHours: request.providerEstimatedHours,
+        pricingMode:
+          request.providerPricingMode ??
+          request.specialty?.pricingMode ??
+          'QUOTE',
+        hourlyRateToman:
+          request.providerHourlyRateToman ??
+          request.specialty?.hourlyRateToman ??
+          null,
+        hourlyUnitLabel:
+          request.providerHourlyUnitLabel ??
+          request.specialty?.hourlyUnitLabel ??
+          null,
+        estimatedHours:
+          invitation?.estimatedHours ?? request.providerEstimatedHours,
+        quoteNote: invitation?.quoteNote ?? null,
+        quoteSubmitted: invitation?.proposedPriceToman != null,
         status: viewStatus,
         note: request.description,
         images: request.images.map((image) => image.url),
@@ -197,18 +231,23 @@ export class ProviderJobsUseCase {
     });
   }
 
-  async accept(
+  async submitQuote(
     userId: string,
     requestId: string,
     proposedPriceToman?: number,
+    quoteNote?: string,
     estimatedHours?: number,
   ) {
     const profile = await this.getApprovedProfile(userId);
-    let acceptedPriceToman = 0;
+    const normalizedQuoteNote = quoteNote?.trim();
+    if (!normalizedQuoteNote) {
+      throw new BadRequestException('توضیحات پیشنهاد قیمت را وارد کنید');
+    }
+    let quotedPriceToman = 0;
     let pricingMode: 'QUOTE' | 'HOURLY' = 'QUOTE';
     let hourlyRateToman: number | null = null;
     let hourlyUnitLabel: string | null = null;
-    let acceptedEstimatedHours: number | null = null;
+    let quotedEstimatedHours: number | null = null;
     let customerId = '';
     let requestTitle = '';
     await this.prisma.$transaction(async (db) => {
@@ -247,20 +286,19 @@ export class ProviderJobsUseCase {
         }
         hourlyRateToman = request.specialty.hourlyRateToman;
         hourlyUnitLabel = request.specialty.hourlyUnitLabel;
-        acceptedEstimatedHours = estimatedHours;
-        acceptedPriceToman = Math.round(hourlyRateToman * estimatedHours);
+        quotedEstimatedHours = estimatedHours;
+        quotedPriceToman = Math.round(hourlyRateToman * estimatedHours);
       } else {
         if (!proposedPriceToman || proposedPriceToman <= 0) {
           throw new BadRequestException(
             'مبلغ پیشنهادی باید بزرگ‌تر از صفر باشد',
           );
         }
-        acceptedPriceToman = proposedPriceToman;
+        quotedPriceToman = proposedPriceToman;
       }
-      if (!Number.isSafeInteger(acceptedPriceToman)) {
-        throw new BadRequestException('مبلغ نهایی معتبر نیست');
+      if (!Number.isSafeInteger(quotedPriceToman)) {
+        throw new BadRequestException('مبلغ پیشنهادی معتبر نیست');
       }
-
       const invitation = await db.providerRequestInvitation.findUnique({
         where: {
           providerProfileId_serviceRequestId: {
@@ -273,37 +311,13 @@ export class ProviderJobsUseCase {
         throw new NotFoundException('دعوت همکاری در دسترس نیست');
       }
 
-      const result = await db.serviceRequest.updateMany({
-        where: {
-          id: requestId,
-          status: 'OPEN',
-          acceptedProviderProfileId: null,
-        },
-        data: {
-          status: 'CUSTOMER_CONFIRMATION_PENDING',
-          acceptedProviderProfileId: profile.id,
-          providerPriceToman: acceptedPriceToman,
-          providerPricingMode: pricingMode,
-          providerHourlyRateToman: hourlyRateToman,
-          providerHourlyUnitLabel: hourlyUnitLabel,
-          providerEstimatedHours: acceptedEstimatedHours,
-        },
-      });
-      if (result.count === 0) {
-        throw new ConflictException('درخواست به متخصص دیگری واگذار شده است');
-      }
-
       await db.providerRequestInvitation.update({
         where: { id: invitation.id },
-        data: { status: 'ACCEPTED', respondedAt: new Date() },
-      });
-      await db.providerRequestInvitation.updateMany({
-        where: {
-          serviceRequestId: requestId,
-          providerProfileId: { not: profile.id },
-          status: 'PENDING',
+        data: {
+          proposedPriceToman: quotedPriceToman,
+          quoteNote: normalizedQuoteNote,
+          estimatedHours: quotedEstimatedHours,
         },
-        data: { status: 'WITHDRAWN', respondedAt: new Date() },
       });
     });
     await this.notifications.createForUser({
@@ -316,11 +330,12 @@ export class ProviderJobsUseCase {
     });
     return {
       message: 'پیشنهاد قیمت برای مشتری ارسال شد',
-      proposedPriceToman: acceptedPriceToman,
+      proposedPriceToman: quotedPriceToman,
+      quoteNote: normalizedQuoteNote,
       pricingMode,
       hourlyRateToman,
       hourlyUnitLabel,
-      estimatedHours: acceptedEstimatedHours,
+      estimatedHours: quotedEstimatedHours,
     };
   }
 

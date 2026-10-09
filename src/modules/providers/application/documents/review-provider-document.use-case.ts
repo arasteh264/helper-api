@@ -23,6 +23,7 @@ export class ReviewProviderDocumentUseCase {
     documentId: string,
     decision: 'APPROVED' | 'REJECTED',
     rejectionNote?: string,
+    adminUserId?: string,
   ) {
     const document = await this.providerDocumentRepository.findById(documentId);
     if (!document) throw new NotFoundException('Document not found');
@@ -36,15 +37,22 @@ export class ReviewProviderDocumentUseCase {
       documentId,
       decision,
       decision === 'REJECTED' ? normalizedRejectionNote! : null,
+      adminUserId,
     );
 
-    await this.syncProviderVerification(document.providerProfileId);
+    if (adminUserId) {
+      await this.syncProviderVerification(
+        document.providerProfileId,
+        adminUserId,
+      );
+    }
 
     return updatedDocument;
   }
 
   private async syncProviderVerification(
     providerProfileId: string,
+    adminUserId: string,
   ): Promise<void> {
     const profile =
       await this.providerProfileRepository.findById(providerProfileId);
@@ -59,8 +67,23 @@ export class ReviewProviderDocumentUseCase {
       );
 
     if (areRequiredDocumentsApproved(documents)) {
+      const beforeState = {
+        verificationStatus: profile.verificationStatus,
+        verificationNote: profile.verificationNote,
+        verifiedAt: profile.verifiedAt?.toISOString() ?? null,
+      };
       profile.verify();
-      await this.providerProfileRepository.update(profile);
+      await this.providerProfileRepository.update(profile, {
+        actorUserId: adminUserId,
+        action: 'PROVIDER_AUTO_APPROVED_AFTER_DOCUMENTS',
+        reason: 'تمام مدارک اجباری متخصص تأیید شد',
+        beforeState,
+        afterState: {
+          verificationStatus: profile.verificationStatus,
+          verificationNote: profile.verificationNote,
+          verifiedAt: profile.verifiedAt?.toISOString() ?? null,
+        },
+      });
     }
   }
 }

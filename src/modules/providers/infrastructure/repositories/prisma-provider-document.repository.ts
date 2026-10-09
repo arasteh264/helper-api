@@ -56,10 +56,34 @@ export class PrismaProviderDocumentRepository implements ProviderDocumentReposit
     id: string,
     status: 'APPROVED' | 'REJECTED',
     rejectionNote?: string | null,
+    adminUserId?: string,
   ): Promise<ProviderDocumentRecord> {
-    return this.prisma.providerDocument.update({
-      where: { id },
-      data: { status: status as any, rejectionNote: rejectionNote ?? null },
-    }) as unknown as ProviderDocumentRecord;
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await tx.providerDocument.findUniqueOrThrow({
+        where: { id },
+        select: { status: true, rejectionNote: true },
+      });
+      const updated = await tx.providerDocument.update({
+        where: { id },
+        data: { status: status as any, rejectionNote: rejectionNote ?? null },
+      });
+      if (adminUserId) {
+        await tx.adminAuditLog.create({
+          data: {
+            actorUserId: adminUserId,
+            action:
+              status === 'APPROVED'
+                ? 'PROVIDER_DOCUMENT_APPROVED'
+                : 'PROVIDER_DOCUMENT_REJECTED',
+            targetType: 'PROVIDER_DOCUMENT',
+            targetId: id,
+            reason: rejectionNote ?? 'مدرک متخصص تأیید شد',
+            beforeState: previous,
+            afterState: { status, rejectionNote: rejectionNote ?? null },
+          },
+        });
+      }
+      return updated as unknown as ProviderDocumentRecord;
+    });
   }
 }
