@@ -70,7 +70,7 @@ const configuredOrigins = [
 
   console.log(`🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs available at: http://localhost:${port}/api`);
-  console.log(`🗄️ Database: ${process.env.DATABASE_URL}`);
+  console.log('🗄️ Database: PostgreSQL');
 }
 
 bootstrap();
