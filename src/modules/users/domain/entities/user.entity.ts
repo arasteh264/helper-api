@@ -10,7 +10,6 @@ export class User {
     private _role: UserRole,
     private _status: UserStatus,
     private _passwordHash: string | null,
-    private _googleId: string | null,
     private _otpCode: string | null,
     private _otpExpiresAt: Date | null,
     private _resetToken: string | null,
@@ -39,7 +38,6 @@ export class User {
       null,
       null,
       null,
-      null,
       now,
       now,
     );
@@ -63,7 +61,6 @@ export class User {
       UserRole.CUSTOMER,
       UserStatus.INACTIVE,
       passwordHash,
-      null,
       otpCode,
       otpExpiresAt,
       null,
@@ -81,7 +78,6 @@ export class User {
     role: UserRole,
     status: UserStatus,
     passwordHash: string | null,
-    googleId: string | null,
     otpCode: string | null,
     otpExpiresAt: Date | null,
     resetToken: string | null,
@@ -97,7 +93,6 @@ export class User {
       role,
       status,
       passwordHash,
-      googleId,
       otpCode,
       otpExpiresAt,
       resetToken,
@@ -118,9 +113,6 @@ export class User {
   }
   get passwordHash(): string | null {
     return this._passwordHash;
-  }
-  get googleId(): string | null {
-    return this._googleId;
   }
   get otpCode(): string | null {
     return this._otpCode;

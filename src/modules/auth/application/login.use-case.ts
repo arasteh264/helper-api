@@ -38,7 +38,7 @@ export class LoginUseCase {
 
     if (!user.passwordHash) {
       throw new UnauthorizedException(
-        'This account has no password set. Try logging in with Google.',
+        'This account has no password set. Please log in with a verification code.',
       );
     }
 

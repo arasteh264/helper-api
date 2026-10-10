@@ -73,7 +73,6 @@ model User {
   email                  String                         @unique
   phone                  String                         @unique
   passwordHash           String?
-  googleId               String?                        @unique
   role                   UserRole
   status                 UserStatus
   resetToken             String?
