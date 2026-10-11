@@ -19,6 +19,7 @@ export interface UpdateSpecialtyGroupCommand {
   sortOrder?: number;
   isActive?: boolean;
   iconFile?: Express.Multer.File;
+  removeIcon?: boolean;
 }
 
 @Injectable()
@@ -50,12 +51,18 @@ export class UpdateSpecialtyGroupUseCase {
     let uploadedIcon: { url: string; publicId: string } | undefined;
 
     if (command.iconFile) {
+      if (command.removeIcon) {
+        throw new ConflictException('برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است');
+      }
       uploadedIcon = await this.iconStorage.uploadIcon(
         command.iconFile,
         'specialty-groups',
       );
       icon = uploadedIcon.url;
       iconPublicId = uploadedIcon.publicId;
+    } else if (command.removeIcon) {
+      icon = null;
+      iconPublicId = null;
     }
 
     let updated: SpecialtyGroupRecord;
@@ -77,7 +84,7 @@ export class UpdateSpecialtyGroupUseCase {
       throw error;
     }
 
-    if (uploadedIcon && existing.iconPublicId) {
+    if ((uploadedIcon || command.removeIcon) && existing.iconPublicId) {
       await this.iconStorage.deleteIcon(existing.iconPublicId);
     }
     return updated;

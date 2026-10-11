@@ -3,7 +3,7 @@ import type { OtpSender } from '../../domain/services/otp-sender.port';
 import { SmsService } from '../../../sms/sms.service';
 
 @Injectable()
-export class KavenegarOtpSender implements OtpSender {
+export class SmsIrOtpSender implements OtpSender {
   constructor(private readonly smsService: SmsService) {}
 
   async send(phone: string, code: string): Promise<void> {

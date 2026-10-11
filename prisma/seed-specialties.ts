@@ -157,12 +157,14 @@ async function main() {
       where: { slug: group.slug },
       update: {
         name: group.name,
+        icon: `/icons/groups/${group.slug}.svg`,
         sortOrder: group.sortOrder,
         isActive: true,
       },
       create: {
         name: group.name,
         slug: group.slug,
+        icon: `/icons/groups/${group.slug}.svg`,
         sortOrder: group.sortOrder,
         isActive: true,
       },
@@ -200,6 +202,14 @@ async function main() {
             `Specialty slug "${specialty.slug}" already belongs to another group`,
           );
         }
+        await prisma.specialty.update({
+          where: { id: existing.id },
+          data: {
+            name: specialty.name,
+            icon: `/icons/specialties/${specialty.slug}.svg`,
+            isActive: true,
+          },
+        });
         skipped += 1;
         continue;
       }
@@ -210,6 +220,7 @@ async function main() {
           groupId: group.id,
           name: specialty.name,
           slug: specialty.slug,
+          icon: `/icons/specialties/${specialty.slug}.svg`,
           sortOrder,
           isActive: true,
           pricingMode: 'QUOTE',
@@ -220,7 +231,7 @@ async function main() {
   }
 
   console.log(
-    `Created ${created} specialties; kept ${skipped} existing slugs unchanged.`,
+    `Created ${created} specialties and updated icons for ${skipped} existing specialties.`,
   );
 }
 

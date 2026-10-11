@@ -91,6 +91,24 @@ model User {
   notificationPreference NotificationPreference?
   notifications          Notification[]
   disputeMessages        ServiceRequestDisputeMessage[]
+  providerOnboardingInvitations ProviderOnboardingInvitation[] @relation("ProviderOnboardingInvitationCreator")
+}
+
+model ProviderOnboardingInvitation {
+  id          String    @id @default(uuid())
+  phone       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  smsSentAt   DateTime?
+  createdAt   DateTime  @default(now())
+  createdById String
+
+  createdBy User @relation("ProviderOnboardingInvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([phone, createdAt])
+  @@index([expiresAt, usedAt, revokedAt])
 }
 
 model BlogPost {
@@ -659,6 +677,8 @@ model ProviderRequestInvitation {
   providerProfileId String
   serviceRequestId  String
   status            ProviderInvitationStatus @default(PENDING)
+  declineReason     String?
+  declineNote       String?
   createdAt         DateTime                 @default(now())
   respondedAt       DateTime?
   distanceKm        Float?

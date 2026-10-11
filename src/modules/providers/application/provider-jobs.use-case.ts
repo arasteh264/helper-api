@@ -10,6 +10,7 @@ import {
 import type { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { PRISMA_SERVICE } from '../../../infrastructure/database/prisma.service.token';
 import { NotificationsService } from '../../notifications/notifications.service';
+import type { ProviderDeclineReason } from './dto/decline-service-request.dto';
 
 @Injectable()
 export class ProviderJobsUseCase {
@@ -110,19 +111,36 @@ export class ProviderJobsUseCase {
         },
         orderBy: { createdAt: 'desc' },
       }),
+      this.prisma.providerRequestInvitation.findMany({
+        where: { providerProfileId: profile.id, status: 'DECLINED' },
+        include: {
+          serviceRequest: {
+            include: {
+              specialty: { select: { name: true } },
+              skills: { include: { skill: true } },
+              images: { select: { url: true } },
+              payments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { status: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
-    const declinedRequests = declinedInvitations.map(
-      (invitation) => invitation.serviceRequest,
-    );
     const records = [
       ...invitations.map((invitation) => ({
         request: invitation.serviceRequest,
         viewStatus: 'new' as const,
       })),
-      ...declinedRequests.map((request) => ({
-        request,
+      ...declinedInvitations.map((invitation) => ({
+        request: invitation.serviceRequest,
         viewStatus: 'declined' as const,
+        declineReason: invitation.declineReason,
+        declineNote: invitation.declineNote,
       })),
       ...assigned.map((request) => ({
         request,
@@ -142,8 +160,11 @@ export class ProviderJobsUseCase {
       customers.map((customer) => [customer.id, customer]),
     );
 
-    return records.map(({ request, viewStatus }) => {
+    return records.map(({ request, viewStatus, ...record }) => {
       const customer = customerById.get(request.customerId);
+      const declineReason =
+        'declineReason' in record ? record.declineReason : null;
+      const declineNote = 'declineNote' in record ? record.declineNote : null;
       const canSeeAddress =
         viewStatus === 'accepted' ||
         viewStatus === 'in_progress' ||
@@ -172,6 +193,12 @@ export class ProviderJobsUseCase {
         hourlyUnitLabel: request.providerHourlyUnitLabel,
         estimatedHours: request.providerEstimatedHours,
         status: viewStatus,
+        ...(viewStatus === 'declined'
+          ? {
+              declineReason,
+              declineNote,
+            }
+          : {}),
         note: request.description,
         images: request.images.map((image) => image.url),
         ...(request.disputeReason
@@ -324,7 +351,12 @@ export class ProviderJobsUseCase {
     };
   }
 
-  async decline(userId: string, requestId: string) {
+  async decline(
+    userId: string,
+    requestId: string,
+    reason: ProviderDeclineReason,
+    note?: string,
+  ) {
     const profile = await this.getApprovedProfile(userId);
     const result = await this.prisma.providerRequestInvitation.updateMany({
       where: {
@@ -333,7 +365,12 @@ export class ProviderJobsUseCase {
         status: 'PENDING',
         serviceRequest: { status: 'OPEN' },
       },
-      data: { status: 'DECLINED', respondedAt: new Date() },
+      data: {
+        status: 'DECLINED',
+        respondedAt: new Date(),
+        declineReason: reason,
+        declineNote: reason === 'OTHER' ? note?.trim() : null,
+      },
     });
     if (!result.count) throw new NotFoundException('دعوت همکاری در دسترس نیست');
     return { message: 'درخواست رد شد' };

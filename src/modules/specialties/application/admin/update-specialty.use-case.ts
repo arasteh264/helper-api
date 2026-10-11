@@ -24,6 +24,7 @@ export interface UpdateSpecialtyCommand {
   hourlyRateToman?: number;
   hourlyUnitLabel?: string;
   iconFile?: Express.Multer.File;
+  removeIcon?: boolean;
 }
 
 @Injectable()
@@ -68,12 +69,18 @@ export class UpdateSpecialtyUseCase {
     let uploadedIcon: { url: string; publicId: string } | undefined;
 
     if (command.iconFile) {
+      if (command.removeIcon) {
+        throw new BadRequestException('برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است');
+      }
       uploadedIcon = await this.iconStorage.uploadIcon(
         command.iconFile,
         'specialties',
       );
       icon = uploadedIcon.url;
       iconPublicId = uploadedIcon.publicId;
+    } else if (command.removeIcon) {
+      icon = null;
+      iconPublicId = null;
     }
 
     let updated: SpecialtyRecord;
@@ -101,7 +108,7 @@ export class UpdateSpecialtyUseCase {
       throw error;
     }
 
-    if (uploadedIcon && existing.iconPublicId) {
+    if ((uploadedIcon || command.removeIcon) && existing.iconPublicId) {
       await this.iconStorage.deleteIcon(existing.iconPublicId);
     }
     return updated;

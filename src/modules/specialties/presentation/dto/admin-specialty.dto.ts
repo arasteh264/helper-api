@@ -56,6 +56,12 @@ export class UpdateSpecialtyGroupDto {
   icon?: string;
 
   @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  removeIcon?: boolean;
+
+  @ApiPropertyOptional()
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -138,6 +144,12 @@ export class CreateSpecialtyDto {
 export class UpdateSpecialtyDto {
   @ApiPropertyOptional({ type: 'string', format: 'binary' })
   icon?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  removeIcon?: boolean;
 
   @ApiPropertyOptional()
   @ApiPropertyOptional()
