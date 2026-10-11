@@ -52,6 +52,17 @@ secrets; never commit their values.
 Apply the `add_provider_onboarding_invitations` Prisma migration before enabling
 the invitation endpoint.
 
+## Admin operations and service request review
+
+The admin dashboard uses `/admin/operations/alerts` and `/admin/audit-logs`.
+Service requests are held for administrator approval by default; the setting is
+available through `/admin/service-requests/review-settings`.
+Before deploying these endpoints, apply pending database migrations with:
+
+```bash
+npx prisma migrate deploy
+```
+
 ## Project setup
 
 ```bash

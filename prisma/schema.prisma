@@ -68,30 +68,49 @@ enum ProviderDocumentType {
 }
 
 model User {
-  id                     String                         @id @default(uuid())
-  name                   String
-  email                  String                         @unique
-  phone                  String                         @unique
-  passwordHash           String?
-  role                   UserRole
-  status                 UserStatus
-  resetToken             String?
-  resetTokenExpiry       DateTime?
-  createdAt              DateTime                       @default(now())
-  updatedAt              DateTime                       @updatedAt
-  otpCode                String?
-  otpExpiresAt           DateTime?
-  providerProfile        ProviderProfile?
-  customerProfile        CustomerProfile?
-  serviceRequests        ServiceRequest[]               @relation("CustomerServiceRequests")
-  addresses              CustomerAddress[]
-  reviewsGiven           ServiceRequestReview[]         @relation("CustomerReviews")
-  sentChatMessages       ChatMessage[]                  @relation("ChatMessageSender")
-  moderatedChatMessages  ChatMessage[]                  @relation("ChatMessageModerator")
-  notificationPreference NotificationPreference?
-  notifications          Notification[]
-  disputeMessages        ServiceRequestDisputeMessage[]
+  id                            String                         @id @default(uuid())
+  name                          String
+  email                         String                         @unique
+  phone                         String                         @unique
+  passwordHash                  String?
+  role                          UserRole
+  status                        UserStatus
+  resetToken                    String?
+  resetTokenExpiry              DateTime?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  otpCode                       String?
+  otpExpiresAt                  DateTime?
+  providerProfile               ProviderProfile?
+  customerProfile               CustomerProfile?
+  serviceRequests               ServiceRequest[]               @relation("CustomerServiceRequests")
+  addresses                     CustomerAddress[]
+  reviewsGiven                  ServiceRequestReview[]         @relation("CustomerReviews")
+  sentChatMessages              ChatMessage[]                  @relation("ChatMessageSender")
+  moderatedChatMessages         ChatMessage[]                  @relation("ChatMessageModerator")
+  notificationPreference        NotificationPreference?
+  notifications                 Notification[]
+  disputeMessages               ServiceRequestDisputeMessage[]
   providerOnboardingInvitations ProviderOnboardingInvitation[] @relation("ProviderOnboardingInvitationCreator")
+  adminActions                  AdminAuditLog[]                @relation("AdminAuditActor")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  action      String
+  targetType  String
+  targetId    String
+  reason      String   @db.Text
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
 }
 
 model ProviderOnboardingInvitation {
@@ -326,6 +345,7 @@ model ProviderSkill {
 }
 
 enum ServiceRequestStatus {
+  PENDING_ADMIN_REVIEW
   OPEN
   OFFER_ACCEPTED
   CUSTOMER_CONFIRMATION_PENDING
@@ -378,6 +398,7 @@ model ServiceRequest {
   disputeReason                DisputeReason?
   disputeDescription           String?               @db.Text
   disputeUpdatedAt             DateTime?
+  adminReviewNote              String?               @db.Text
 
   address   String?
   latitude  Float?
@@ -659,10 +680,11 @@ model PortfolioItemImage {
 }
 
 model WalletConfiguration {
-  id             String   @id @default("global")
-  commissionRate Float    @default(10)
-  minWithdrawal  Int      @default(100000)
-  updatedAt      DateTime @updatedAt
+  id                          String   @id @default("global")
+  commissionRate              Float    @default(10)
+  minWithdrawal               Int      @default(100000)
+  requireServiceRequestReview Boolean  @default(true)
+  updatedAt                   DateTime @updatedAt
 }
 
 enum ProviderInvitationStatus {

@@ -174,6 +174,15 @@ export class ServiceRequest {
     this._updatedAt = new Date();
   }
 
+  holdForAdminReview(): void {
+    this.assertTransition(
+      ServiceRequestStatus.OPEN,
+      ServiceRequestStatus.PENDING_ADMIN_REVIEW,
+    );
+    this._status = ServiceRequestStatus.PENDING_ADMIN_REVIEW;
+    this._updatedAt = new Date();
+  }
+
   addImage(imageId: string): void {
     this._imageIds.push(imageId);
     this._updatedAt = new Date();
@@ -196,6 +205,15 @@ export class ServiceRequest {
       ServiceRequestStatus.OFFER_ACCEPTED,
     );
     this._status = ServiceRequestStatus.OFFER_ACCEPTED;
+    this._updatedAt = new Date();
+  }
+
+  approveAdminReview(): void {
+    this.assertTransition(
+      ServiceRequestStatus.PENDING_ADMIN_REVIEW,
+      ServiceRequestStatus.OPEN,
+    );
+    this._status = ServiceRequestStatus.OPEN;
     this._updatedAt = new Date();
   }
 
