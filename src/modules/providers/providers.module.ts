@@ -36,12 +36,17 @@ import { ReviewProviderDocumentUseCase } from './application/documents/review-pr
 import { SetProviderSpecialtiesUseCase } from './application/specialties/set-provider-specialties.use-case';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { GetAdminProviderInsightsUseCase } from './application/get-admin-provider-insights.use-case';
+import { ProviderOnboardingController } from './presentation/controllers/provider-onboarding.controller';
+import { ProviderOnboardingService } from './application/provider-onboarding.service';
+import { SmsModule } from '../sms/sms.module';
+import { TokenModule } from '../auth/token.module';
 
 @Module({
-  imports: [StorageModule, UsersModule, NotificationsModule],
+  imports: [StorageModule, UsersModule, NotificationsModule, SmsModule, TokenModule],
   controllers: [
     ProviderProfileController,
     AdminProviderController,
+    ProviderOnboardingController,
     ProviderJobsController,
     PublicProvidersController,
   ],
@@ -66,6 +71,7 @@ import { GetAdminProviderInsightsUseCase } from './application/get-admin-provide
     SetProviderSpecialtiesUseCase,
     ProviderJobsUseCase,
     GetAdminProviderInsightsUseCase,
+    ProviderOnboardingService,
     {
       provide: PROVIDER_PROFILE_REPOSITORY,
       useClass: PrismaProviderProfileRepository,

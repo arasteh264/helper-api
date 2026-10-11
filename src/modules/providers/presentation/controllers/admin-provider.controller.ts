@@ -4,11 +4,13 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
   BadRequestException,
   NotFoundException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -30,12 +32,18 @@ import { ReviewProviderDocumentUseCase } from '../../application/documents/revie
 import { areRequiredDocumentsApproved } from '../../infrastructure/provider-documents.util';
 import { ReviewProviderDocumentDto } from '../../application/documents/review-provider-document.dto';
 import { GetAdminProviderInsightsUseCase } from '../../application/get-admin-provider-insights.use-case';
+import { CreateProviderInvitationDto } from '../../application/dto/create-provider-invitation.dto';
+import { ProviderOnboardingService } from '../../application/provider-onboarding.service';
+import { SmsService } from '../../../sms/sms.service';
+import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 
 @ApiTags('Admin - Providers')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/providers')
 export class AdminProviderController {
+  private readonly logger = new Logger(AdminProviderController.name);
+
   constructor(
     @Inject(PROVIDER_PROFILE_REPOSITORY)
     private readonly providerProfileRepository: ProviderProfileRepository,
@@ -44,12 +52,51 @@ export class AdminProviderController {
     private readonly getProviderDocumentsForReviewUseCase: GetProviderDocumentsForReviewUseCase,
     private readonly reviewProviderDocumentUseCase: ReviewProviderDocumentUseCase,
     private readonly getAdminProviderInsightsUseCase: GetAdminProviderInsightsUseCase,
+    private readonly providerOnboardingService: ProviderOnboardingService,
+    private readonly smsService: SmsService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  @ApiOperation({ summary: 'Invite a provider to complete registration by SMS' })
+  @Post('invitations')
+  createInvitation(
+    @CurrentUser() currentUser: TokenPayload,
+    @Body() dto: CreateProviderInvitationDto,
+  ) {
+    return this.providerOnboardingService.createInvitation(
+      dto.phone,
+      currentUser.userId,
+    );
+  }
 
   @ApiOperation({ summary: 'Get provider registration and performance insights' })
   @Get('analytics')
   getAnalytics() {
     return this.getAdminProviderInsightsUseCase.execute();
+  }
+
+  @ApiOperation({ summary: 'Get declined service request history for a provider' })
+  @Get(':providerId/declines')
+  getDeclines(@Param('providerId') providerId: string) {
+    return this.prisma.providerRequestInvitation.findMany({
+      where: { providerProfileId: providerId, status: 'DECLINED' },
+      select: {
+        id: true,
+        declineReason: true,
+        declineNote: true,
+        respondedAt: true,
+        serviceRequest: {
+          select: {
+            id: true,
+            title: true,
+            createdAt: true,
+            specialty: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { respondedAt: 'desc' },
+      take: 100,
+    });
   }
 
   @ApiOperation({ summary: 'List provider profiles by verification status' })
@@ -101,6 +148,9 @@ export class AdminProviderController {
       }
     }
 
+    const shouldSendApprovalSms =
+      dto.status === 'APPROVED' &&
+      profile.verificationStatus !== 'APPROVED';
     profile.reviewDecision(dto.status, dto.note);
     await this.providerProfileRepository.update(profile);
 
@@ -108,7 +158,46 @@ export class AdminProviderController {
       profile.userId,
     );
 
-    return ProviderPrivateProfileDetailsResponseDto.from(details!);
+    const response = ProviderPrivateProfileDetailsResponseDto.from(details!);
+    if (shouldSendApprovalSms && details) {
+      try {
+        const customerAppUrl = (
+          process.env.CUSTOMER_APP_URL ??
+          'https://helper-customer.vercel.app'
+        ).replace(/\/+$/, '');
+        await this.smsService.sendNotification(
+          details.user.phone,
+          `ثبت‌نام شما در هلپر تأیید شد. برای دریافت اولین کار وارد پنل متخصص شوید: ${customerAppUrl}/provider`,
+        );
+        return { ...response, approvalSmsSent: true };
+      } catch (error) {
+        this.logger.error(
+          `Provider ${providerId} was approved, but the SMS notification failed`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        return { ...response, approvalSmsSent: false };
+      }
+    }
+
+    return response;
+  }
+
+  @ApiOperation({ summary: 'Get provider details for admin review' })
+  @Get(':providerId/details')
+  async getDetails(@Param('providerId') providerId: string) {
+    const profile = await this.providerProfileRepository.findById(providerId);
+    if (!profile) {
+      throw new NotFoundException('Provider profile not found');
+    }
+
+    const details = await this.providerProfileRepository.findDetailsByUserId(
+      profile.userId,
+    );
+    if (!details) {
+      throw new NotFoundException('Provider details not found');
+    }
+
+    return ProviderPrivateProfileDetailsResponseDto.from(details);
   }
 
   @ApiOperation({ summary: 'Get all verification documents of a provider' })

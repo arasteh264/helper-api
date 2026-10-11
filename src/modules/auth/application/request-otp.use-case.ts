@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import type { UserRepository } from '../../users/domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';
 import type { OtpSender } from '../domain/services/otp-sender.port';
@@ -11,7 +12,7 @@ import { User } from '../../users/domain/entities/user.entity';
 import { UserStatus } from '../../users/domain/entities/user-status.enum';
 
 function generateOtpCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 @Injectable()
@@ -38,7 +39,7 @@ export class RequestOtpUseCase {
         expiresAt,
       );
       await this.userRepository.save(user);
-      await this.otpSender.send(user.email, code);
+      await this.otpSender.send(phone, code);
       return;
     }
 
@@ -49,6 +50,6 @@ export class RequestOtpUseCase {
     user.setOtp(code, expiresAt);
     await this.userRepository.update(user);
 
-    await this.otpSender.send(user.email, code);
+    await this.otpSender.send(phone, code);
   }
 }

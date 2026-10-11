@@ -25,6 +25,33 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Provider onboarding invitations
+
+An authenticated administrator can invite an Iranian mobile number to complete
+provider registration by SMS:
+
+- `POST /admin/providers/invitations` with `{ "phone": "09121234567" }`
+- The SMS link is valid for seven days and can only be used once. Only a SHA-256
+  hash of its token is stored.
+- The public customer form completes registration through
+  `POST /providers/onboarding/complete`. The new provider account is created
+  with a pending verification profile and selected specialties and skills.
+- The provider then uploads the required documents through
+  `POST /providers/profile/documents`; the profile cannot be approved until
+  all required documents are approved.
+- Approving a provider sends an SMS directing them to the provider dashboard.
+
+Configure `PROVIDER_ONBOARDING_URL` to the public customer form URL, for example
+`https://helper-customer.vercel.app/provider/onboarding`, and configure
+`CUSTOMER_APP_URL`, `SMS_IR_API_KEY`, `SMS_IR_OTP_TEMPLATE_ID`, and
+`SMS_IR_OTP_PARAMETER_NAME` for OTP delivery. The parameter name must match the
+placeholder configured in the SMS.ir template (defaults to `Code`).
+`SMS_IR_LINE_NUMBER` is additionally required for non-template notifications
+and provider invitation messages. Keep all SMS.ir credentials as server-side
+secrets; never commit their values.
+Apply the `add_provider_onboarding_invitations` Prisma migration before enabling
+the invitation endpoint.
+
 ## Project setup
 
 ```bash

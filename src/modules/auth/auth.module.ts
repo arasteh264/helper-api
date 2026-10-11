@@ -12,9 +12,12 @@ import { ChangePasswordUseCase } from './application/change-password.use-case';
 import { CustomerPasswordController } from './presentation/controllers/customer-password.controller';
 import { TokenModule } from './token.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OTP_SENDER } from './domain/services/otp-sender.token';
+import { SmsIrOtpSender } from './infrastructure/services/sms-ir-otp-sender';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
-  imports: [UsersModule, TokenModule, NotificationsModule, PassportModule],
+  imports: [UsersModule, TokenModule, NotificationsModule, PassportModule, SmsModule],
   controllers: [AuthController, CustomerPasswordController],
   providers: [
     LoginUseCase,
@@ -24,6 +27,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ResetPasswordUseCase,
     ChangePasswordUseCase,
     JwtStrategy,
+    {
+      provide: OTP_SENDER,
+      useClass: SmsIrOtpSender,
+    },
   ],
 })
 export class AuthModule {}

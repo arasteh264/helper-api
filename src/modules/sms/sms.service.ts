@@ -1,62 +1,110 @@
-import { Injectable, Logger } from '@nestjs/common';
-import * as Kavenegar from 'kavenegar';
+import { Injectable } from '@nestjs/common';
+
+type SmsIrResponse = {
+  status?: number;
+  message?: string;
+  data?: unknown;
+};
 
 @Injectable()
 export class SmsService {
-  private readonly logger = new Logger(SmsService.name);
-  private readonly api = Kavenegar.KavenegarApi({
-    apikey: process.env.KAVENEGAR_API_KEY ?? '',
-  });
-
   async sendOtp(phone: string, code: string): Promise<void> {
-    this.logger.log(`OTP for ${phone}: ${code}`);
+    const apiKey = this.getApiKey();
+    const templateIdValue = process.env.SMS_IR_OTP_TEMPLATE_ID || '123456';
 
-    if (!process.env.KAVENEGAR_API_KEY || !process.env.KAVENEGAR_SENDER) {
-      this.logger.warn('Kavenegar env vars are missing; OTP was only logged.');
-      return;
+    if (!apiKey) {
+      throw new Error(
+        'Set SMS_IR_API_KEY (or X-API-KEY) in the API process environment',
+      );
     }
 
-    return new Promise((resolve) => {
-      this.api.Send(
-        {
-          message: `Your verification code is: ${code}\nThis code is valid for 2 minutes.`,
-          sender: process.env.KAVENEGAR_SENDER,
-          receptor: phone,
-        },
-        (response: any, status: number) => {
-          if (status !== 200) {
-            this.logger.warn(
-              `Kavenegar failed; OTP was only logged. status=${status} response=${JSON.stringify(response)}`,
-            );
-            resolve();
-            return;
-          }
-          resolve();
-        },
+    const templateId = Number(templateIdValue);
+    if (!Number.isSafeInteger(templateId) || templateId <= 0) {
+      throw new Error('SMS_IR_OTP_TEMPLATE_ID must be a positive integer');
+    }
+
+    const configuredParameterName = process.env.SMS_IR_OTP_PARAMETER_NAME;
+    const parameterName =
+      templateId === 123456 ? 'Code' : configuredParameterName;
+    if (!parameterName || !/^[A-Za-z][A-Za-z0-9_]{0,49}$/.test(parameterName)) {
+      throw new Error(
+        'SMS_IR_OTP_PARAMETER_NAME must match a key configured in the SMS.ir template',
       );
+    }
+
+    const response = await fetch('https://api.sms.ir/v1/send/verify', {
+      method: 'POST',
+      headers: {
+        Accept: 'text/plain',
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        mobile: phone,
+        templateId,
+        parameters: [
+          {
+            name: parameterName,
+            value: code,
+          },
+        ],
+      }),
     });
+
+    const result = await this.readResponse(response);
+    if (!response.ok || result.status !== 1) {
+      throw new Error(
+        `SMS.ir OTP delivery failed (HTTP ${response.status}, status ${result.status ?? 'unknown'}${result.message ? `: ${result.message}` : ''})`,
+      );
+    }
   }
 
   async sendNotification(phone: string, message: string): Promise<void> {
-    if (!process.env.KAVENEGAR_API_KEY || !process.env.KAVENEGAR_SENDER) {
-      throw new Error('Kavenegar notification settings are missing');
+    const apiKey = this.getApiKey();
+    const lineNumberValue = process.env.SMS_IR_LINE_NUMBER;
+
+    if (!apiKey || !lineNumberValue) {
+      throw new Error(
+        'SMS_IR_API_KEY (or X-API-KEY) and SMS_IR_LINE_NUMBER must be configured',
+      );
     }
 
-    await new Promise<void>((resolve, reject) => {
-      this.api.Send(
-        {
-          message,
-          sender: process.env.KAVENEGAR_SENDER,
-          receptor: phone,
-        },
-        (response: unknown, status: number) => {
-          if (status !== 200) {
-            reject(new Error(`Kavenegar notification failed: ${status}`));
-            return;
-          }
-          resolve();
-        },
-      );
+    const lineNumber = Number(lineNumberValue);
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) {
+      throw new Error('SMS_IR_LINE_NUMBER must be a positive integer');
+    }
+
+    const response = await fetch('https://api.sms.ir/v1/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey,
+      },
+      body: JSON.stringify({
+        lineNumber,
+        messageText: message,
+        mobiles: [phone],
+      }),
     });
+
+    const result = await this.readResponse(response);
+    if (!response.ok || result.status !== 1) {
+      throw new Error(
+        `SMS.ir message delivery failed (HTTP ${response.status}, status ${result.status ?? 'unknown'})`,
+      );
+    }
+  }
+
+  private async readResponse(response: Response): Promise<SmsIrResponse> {
+    try {
+      return (await response.json()) as SmsIrResponse;
+    } catch {
+      throw new Error(`SMS.ir returned an invalid response (HTTP ${response.status})`);
+    }
+  }
+
+  private getApiKey(): string | undefined {
+    return process.env.SMS_IR_API_KEY || process.env['X-API-KEY'];
   }
 }

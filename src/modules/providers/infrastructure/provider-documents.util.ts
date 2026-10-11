@@ -4,8 +4,14 @@ import { ProviderDocumentRecord, REQUIRED_PROVIDER_DOCUMENT_TYPES } from "../app
 export function areRequiredDocumentsApproved(
   documents: ProviderDocumentRecord[],
 ): boolean {
-   if (documents.length === 0) return false;
-  return documents.every((doc) => doc.status === 'APPROVED');
+  const approvedTypes = new Set(
+    documents
+      .filter((document) => document.status === 'APPROVED')
+      .map((document) => document.type),
+  );
+  return REQUIRED_PROVIDER_DOCUMENT_TYPES.every((type) =>
+    approvedTypes.has(type),
+  );
 }
 
 export function hasRejectedDocument(

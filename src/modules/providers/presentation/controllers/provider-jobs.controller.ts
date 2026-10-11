@@ -7,6 +7,7 @@ import { ProviderJobsUseCase } from '../../application/provider-jobs.use-case';
 import { AcceptServiceRequestDto } from '../../application/dto/accept-service-request.dto';
 import { CreateServiceRequestDisputeMessageDto } from '../../../payments/dto/create-service-request-dispute-message.dto';
 import { RaiseProviderNonPaymentDisputeDto } from '../../application/dto/raise-provider-non-payment-dispute.dto';
+import { DeclineServiceRequestDto } from '../../application/dto/decline-service-request.dto';
 
 @ApiTags('Provider Jobs')
 @ApiBearerAuth()
@@ -41,8 +42,14 @@ export class ProviderJobsController {
   decline(
     @CurrentUser() user: TokenPayload,
     @Param('requestId') requestId: string,
+    @Body() dto: DeclineServiceRequestDto,
   ) {
-    return this.providerJobsUseCase.decline(user.userId, requestId);
+    return this.providerJobsUseCase.decline(
+      user.userId,
+      requestId,
+      dto.reason,
+      dto.note,
+    );
   }
 
   @ApiOperation({ summary: 'Start an accepted job' })

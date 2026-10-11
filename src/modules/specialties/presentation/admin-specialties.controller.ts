@@ -108,6 +108,7 @@ export class AdminSpecialtiesController {
       sortOrder: dto.sortOrder,
       isActive: dto.isActive,
       iconFile: icon,
+      removeIcon: dto.removeIcon,
     });
   }
 
@@ -158,6 +159,7 @@ export class AdminSpecialtiesController {
       pricingMode: dto.pricingMode,
       hourlyRateToman: dto.hourlyRateToman,
       hourlyUnitLabel: dto.hourlyUnitLabel,
+      removeIcon: dto.removeIcon,
     });
   }
 
