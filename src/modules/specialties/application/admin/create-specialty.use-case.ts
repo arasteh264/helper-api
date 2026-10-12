@@ -22,6 +22,7 @@ export interface CreateSpecialtyCommand {
   pricingMode?: 'QUOTE' | 'HOURLY';
   hourlyRateToman?: number;
   hourlyUnitLabel?: string;
+  allowsQuoteItems?: boolean;
   iconFile?: Express.Multer.File;
 }
 
@@ -74,6 +75,7 @@ export class CreateSpecialtyUseCase {
         pricingMode: command.pricingMode ?? 'QUOTE',
         hourlyRateToman: command.hourlyRateToman ?? null,
         hourlyUnitLabel: command.hourlyUnitLabel ?? null,
+        allowsQuoteItems: command.allowsQuoteItems ?? false,
       });
     } catch (error) {
       if (iconPublicId) {

@@ -11,6 +11,8 @@ import type { PrismaService } from '../../../infrastructure/database/prisma.serv
 import { PRISMA_SERVICE } from '../../../infrastructure/database/prisma.service.token';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type { ProviderDeclineReason } from './dto/decline-service-request.dto';
+import type { SubmitServiceRequestQuoteDto } from './dto/submit-service-request-quote.dto';
+import { QuoteItemSupplyMode } from './dto/submit-service-request-quote.dto';
 
 @Injectable()
 export class ProviderJobsUseCase {
@@ -31,10 +33,22 @@ export class ProviderJobsUseCase {
           status: 'PENDING',
           serviceRequest: { status: 'OPEN' },
         },
+        omit: {
+          declineReason: true,
+          declineNote: true,
+        },
         include: {
           serviceRequest: {
             include: {
-              specialty: { select: { name: true } },
+              specialty: {
+                select: {
+                  name: true,
+                  pricingMode: true,
+                  hourlyRateToman: true,
+                  hourlyUnitLabel: true,
+                  allowsQuoteItems: true,
+                },
+              },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
               payments: {
@@ -73,7 +87,15 @@ export class ProviderJobsUseCase {
           },
         },
         include: {
-          specialty: { select: { name: true } },
+          specialty: {
+            select: {
+              name: true,
+              pricingMode: true,
+              hourlyRateToman: true,
+              hourlyUnitLabel: true,
+              allowsQuoteItems: true,
+            },
+          },
           skills: { include: { skill: true } },
           images: { select: { url: true } },
           payments: {
@@ -95,28 +117,22 @@ export class ProviderJobsUseCase {
       }),
       this.prisma.providerRequestInvitation.findMany({
         where: { providerProfileId: profile.id, status: 'DECLINED' },
-        include: {
-          serviceRequest: {
-            include: {
-              specialty: { select: { name: true } },
-              skills: { include: { skill: true } },
-              images: { select: { url: true } },
-              payments: {
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-                select: { status: true },
-              },
-            },
-          },
+        omit: {
+          declineReason: true,
+          declineNote: true,
         },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.providerRequestInvitation.findMany({
-        where: { providerProfileId: profile.id, status: 'DECLINED' },
         include: {
           serviceRequest: {
             include: {
-              specialty: { select: { name: true } },
+              specialty: {
+                select: {
+                  name: true,
+                  pricingMode: true,
+                  hourlyRateToman: true,
+                  hourlyUnitLabel: true,
+                  allowsQuoteItems: true,
+                },
+              },
               skills: { include: { skill: true } },
               images: { select: { url: true } },
               payments: {
@@ -139,8 +155,6 @@ export class ProviderJobsUseCase {
       ...declinedInvitations.map((invitation) => ({
         request: invitation.serviceRequest,
         viewStatus: 'declined' as const,
-        declineReason: invitation.declineReason,
-        declineNote: invitation.declineNote,
       })),
       ...assigned.map((request) => ({
         request,
@@ -159,6 +173,17 @@ export class ProviderJobsUseCase {
     const customerById = new Map(
       customers.map((customer) => [customer.id, customer]),
     );
+    const quotes = records.length
+      ? await this.prisma.serviceRequestQuote.findMany({
+          where: {
+            providerProfileId: profile.id,
+            serviceRequestId: { in: records.map(({ request }) => request.id) },
+          },
+        })
+      : [];
+    const quoteByRequestId = new Map(
+      quotes.map((quote) => [quote.serviceRequestId, quote]),
+    );
 
     return records.map(({ request, viewStatus, ...record }) => {
       const customer = customerById.get(request.customerId);
@@ -170,6 +195,7 @@ export class ProviderJobsUseCase {
         viewStatus === 'in_progress' ||
         viewStatus === 'awaiting_confirmation';
       const paymentStatus = request.payments[0]?.status ?? 'PENDING';
+      const quote = quoteByRequestId.get(request.id);
       return {
         id: request.id,
         title: request.title,
@@ -188,10 +214,23 @@ export class ProviderJobsUseCase {
           request.budgetMax ??
           request.budgetMin ??
           0,
-        pricingMode: request.providerPricingMode,
-        hourlyRateToman: request.providerHourlyRateToman,
-        hourlyUnitLabel: request.providerHourlyUnitLabel,
+        pricingMode:
+          request.providerPricingMode ?? request.specialty?.pricingMode ?? 'QUOTE',
+        hourlyRateToman:
+          request.providerHourlyRateToman ??
+          request.specialty?.hourlyRateToman ??
+          null,
+        hourlyUnitLabel:
+          request.providerHourlyUnitLabel ??
+          request.specialty?.hourlyUnitLabel ??
+          null,
         estimatedHours: request.providerEstimatedHours,
+        allowsQuoteItems: request.specialty?.allowsQuoteItems ?? false,
+        quoteSubmitted: Boolean(quote),
+        proposedPriceToman: quote?.laborPriceToman ?? undefined,
+        quoteTotalPriceToman: quote?.totalPriceToman ?? undefined,
+        quoteNote: quote?.quoteNote ?? undefined,
+        quoteItems: quote?.items ?? [],
         status: viewStatus,
         ...(viewStatus === 'declined'
           ? {
@@ -222,6 +261,139 @@ export class ProviderJobsUseCase {
           : {}),
       };
     });
+  }
+
+  async submitQuote(
+    userId: string,
+    requestId: string,
+    dto: SubmitServiceRequestQuoteDto,
+  ) {
+    const profile = await this.getApprovedProfile(userId);
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        status: 'OPEN',
+        acceptedProviderProfileId: null,
+      },
+      select: {
+        id: true,
+        customerId: true,
+        title: true,
+        specialty: {
+          select: {
+            pricingMode: true,
+            hourlyRateToman: true,
+            hourlyUnitLabel: true,
+            allowsQuoteItems: true,
+          },
+        },
+        invitations: {
+          where: { providerProfileId: profile.id, status: 'PENDING' },
+          select: { id: true },
+        },
+      },
+    });
+    if (!request || !request.invitations.length) {
+      throw new NotFoundException('دعوت همکاری در دسترس نیست');
+    }
+
+    const items = dto.items ?? [];
+    if (items.length > 0 && !request.specialty?.allowsQuoteItems) {
+      throw new ForbiddenException('ثبت هزینه‌ی قطعات برای این تخصص فعال نیست');
+    }
+    for (const item of items) {
+      if (item.supplyMode === QuoteItemSupplyMode.CUSTOMER && item.amountToman !== 0) {
+        throw new BadRequestException('برای اقلامی که مشتری تهیه می‌کند مبلغ وارد نکنید');
+      }
+      if (
+        item.supplyMode === QuoteItemSupplyMode.PROVIDER_SEPARATE &&
+        item.amountToman <= 0
+      ) {
+        throw new BadRequestException('هزینه‌ی اقلام جداگانه باید بیشتر از صفر باشد');
+      }
+    }
+
+    const pricingMode = request.specialty?.pricingMode ?? 'QUOTE';
+    const estimatedHours = dto.estimatedHours ?? null;
+    let laborPriceToman = dto.proposedPriceToman;
+    let hourlyRateToman: number | null = null;
+    let hourlyUnitLabel: string | null = null;
+    if (pricingMode === 'HOURLY') {
+      if (!estimatedHours || estimatedHours <= 0) {
+        throw new BadRequestException('تعداد ساعت تخمینی الزامی است');
+      }
+      if (!request.specialty?.hourlyRateToman) {
+        throw new ConflictException('نرخ ساعتی این تخصص تنظیم نشده است');
+      }
+      hourlyRateToman = request.specialty.hourlyRateToman;
+      hourlyUnitLabel = request.specialty.hourlyUnitLabel;
+      laborPriceToman = Math.round(hourlyRateToman * estimatedHours);
+    } else if (estimatedHours !== null) {
+      throw new BadRequestException('برای این تخصص تعداد ساعت ارسال نکنید');
+    }
+    if (!Number.isSafeInteger(laborPriceToman) || laborPriceToman <= 0) {
+      throw new BadRequestException('مبلغ اجرت معتبر نیست');
+    }
+    const totalPriceToman =
+      laborPriceToman +
+      items.reduce(
+        (sum, item) =>
+          sum +
+          (item.supplyMode === QuoteItemSupplyMode.PROVIDER_SEPARATE
+            ? item.amountToman
+            : 0),
+        0,
+      );
+    if (!Number.isSafeInteger(totalPriceToman)) {
+      throw new BadRequestException('مبلغ کل پیشنهاد معتبر نیست');
+    }
+    const quoteItems = items.map(({ name, amountToman, supplyMode }) => ({
+      name,
+      amountToman,
+      supplyMode,
+    }));
+
+    const quote = await this.prisma.serviceRequestQuote.upsert({
+      where: {
+        serviceRequestId_providerProfileId: {
+          serviceRequestId: request.id,
+          providerProfileId: profile.id,
+        },
+      },
+      create: {
+        serviceRequestId: request.id,
+        providerProfileId: profile.id,
+        laborPriceToman,
+        totalPriceToman,
+        quoteNote: dto.quoteNote.trim(),
+        estimatedHours,
+        pricingMode,
+        hourlyRateToman,
+        hourlyUnitLabel,
+        items: quoteItems,
+      },
+      update: {
+        laborPriceToman,
+        totalPriceToman,
+        quoteNote: dto.quoteNote.trim(),
+        estimatedHours,
+        pricingMode,
+        hourlyRateToman,
+        hourlyUnitLabel,
+        items: quoteItems,
+      },
+      select: { id: true },
+    });
+    await this.notifications.createForUser({
+      userId: request.customerId,
+      category: 'OPPORTUNITIES',
+      type: 'PROVIDER_OFFER',
+      title: 'پیشنهاد قیمت متخصص',
+      body: `برای درخواست «${request.title}» پیشنهاد قیمت جدید ثبت شده است.`,
+      serviceRequestId: requestId,
+    });
+
+    return { id: quote.id, laborPriceToman, totalPriceToman };
   }
 
   async accept(
@@ -310,6 +482,7 @@ export class ProviderJobsUseCase {
           status: 'CUSTOMER_CONFIRMATION_PENDING',
           acceptedProviderProfileId: profile.id,
           providerPriceToman: acceptedPriceToman,
+          providerLaborPriceToman: acceptedPriceToman,
           providerPricingMode: pricingMode,
           providerHourlyRateToman: hourlyRateToman,
           providerHourlyUnitLabel: hourlyUnitLabel,

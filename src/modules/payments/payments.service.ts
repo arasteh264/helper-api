@@ -1038,6 +1038,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           customerId: true,
           acceptedProviderProfileId: true,
           providerPriceToman: true,
+          providerLaborPriceToman: true,
           acceptedProviderProfile: { select: { userId: true } },
         },
       });
@@ -1102,8 +1103,10 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      const commissionBase =
+        request.providerLaborPriceToman ?? request.providerPriceToman;
       const commission = Math.round(
-        (request.providerPriceToman * configuration.commissionRate) / 100,
+        (commissionBase * configuration.commissionRate) / 100,
       );
       if (commission > 0) {
         const netBalance = await tx.wallet.update({

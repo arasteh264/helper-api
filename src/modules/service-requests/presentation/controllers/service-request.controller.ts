@@ -5,6 +5,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  InternalServerErrorException,
   NotFoundException,
   Patch,
   Param,
@@ -43,6 +44,7 @@ import { Logger } from '@nestjs/common';
 import { CreateServiceRequestReviewDto } from '../../application/dto/create-service-request-review.dto';
 import { MyServiceRequestsQueryDto } from '../../../../modules/customers/application/dto/my-service-requests-query.dto';
 import { UpdateServiceRequestDto } from '../../application/dto/update-service-request.dto';
+import { SelectServiceRequestOfferDto } from '../../application/dto/select-service-request-offer.dto';
 
 function isUniqueConstraintError(error: unknown): boolean {
   if (
@@ -56,6 +58,38 @@ function isUniqueConstraintError(error: unknown): boolean {
     typeof codeDescriptor?.value === 'string' &&
     codeDescriptor.value === 'P2002'
   );
+}
+
+function quoteItemsForStorage(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new InternalServerErrorException('ریز اقلام پیشنهاد معتبر نیست');
+  }
+
+  return value.map((item) => {
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      Array.isArray(item) ||
+      !('name' in item) ||
+      !('amountToman' in item) ||
+      !('supplyMode' in item) ||
+      typeof item.name !== 'string' ||
+      typeof item.amountToman !== 'number' ||
+      !Number.isSafeInteger(item.amountToman) ||
+      item.amountToman < 0 ||
+      (item.supplyMode !== 'CUSTOMER' &&
+        item.supplyMode !== 'PROVIDER_SEPARATE' &&
+        item.supplyMode !== 'PROVIDER_INCLUDED')
+    ) {
+      throw new InternalServerErrorException('ریز اقلام پیشنهاد معتبر نیست');
+    }
+
+    return {
+      name: item.name,
+      amountToman: item.amountToman,
+      supplyMode: item.supplyMode,
+    };
+  });
 }
 @ApiTags('Service Requests')
 @ApiBearerAuth()
@@ -81,6 +115,122 @@ export class ServiceRequestController {
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 20,
       group: query.group ?? 'active',
+    });
+  }
+
+  @ApiOperation({ summary: 'List provider quotes for a customer service request' })
+  @Get(':id/offers')
+  async getOffers(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+  ) {
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: { id, customerId: currentUser.userId, status: 'OPEN' },
+      select: { id: true, specialty: { select: { name: true } } },
+    });
+    if (!request) throw new NotFoundException('درخواست باز پیدا نشد');
+
+    const quotes = await this.prisma.serviceRequestQuote.findMany({
+      where: { serviceRequestId: request.id },
+      include: {
+        providerProfile: {
+          select: {
+            id: true,
+            rating: true,
+            isVerified: true,
+            avatarUrl: true,
+            user: { select: { name: true } },
+            reviews: { select: { id: true } },
+          },
+        },
+      },
+      orderBy: [{ totalPriceToman: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return quotes.map((quote) => ({
+      id: quote.id,
+      providerProfileId: quote.providerProfile.id,
+      name: quote.providerProfile.user.name,
+      rating: quote.providerProfile.rating,
+      reviews: quote.providerProfile.reviews.length,
+      verified: quote.providerProfile.isVerified,
+      avatarUrl: quote.providerProfile.avatarUrl,
+      field: request.specialty?.name ?? 'متخصص خدمات',
+      distanceKm: null,
+      proposedPriceToman: quote.totalPriceToman,
+      laborPriceToman: quote.laborPriceToman,
+      quoteNote: quote.quoteNote,
+      estimatedHours: quote.estimatedHours,
+      items: quote.items,
+    }));
+  }
+
+  @ApiOperation({ summary: 'Select a provider quote and proceed to payment' })
+  @Post(':id/offers/select')
+  async selectOffer(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: SelectServiceRequestOfferDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const request = await tx.serviceRequest.findFirst({
+        where: { id, customerId: currentUser.userId, status: 'OPEN' },
+        select: { id: true },
+      });
+      if (!request) throw new NotFoundException('درخواست باز پیدا نشد');
+
+      const quote = await tx.serviceRequestQuote.findUnique({
+        where: {
+          serviceRequestId_providerProfileId: {
+            serviceRequestId: request.id,
+            providerProfileId: dto.providerProfileId,
+          },
+        },
+      });
+      if (!quote) throw new NotFoundException('پیشنهاد متخصص پیدا نشد');
+
+      const updated = await tx.serviceRequest.updateMany({
+        where: {
+          id: request.id,
+          customerId: currentUser.userId,
+          status: 'OPEN',
+          acceptedProviderProfileId: null,
+        },
+        data: {
+          status: 'CUSTOMER_CONFIRMATION_PENDING',
+          acceptedProviderProfileId: quote.providerProfileId,
+          providerPriceToman: quote.totalPriceToman,
+          providerLaborPriceToman: quote.laborPriceToman,
+          providerQuoteNote: quote.quoteNote,
+          providerQuoteItems: quoteItemsForStorage(quote.items),
+          providerPricingMode: quote.pricingMode,
+          providerHourlyRateToman: quote.hourlyRateToman,
+          providerHourlyUnitLabel: quote.hourlyUnitLabel,
+          providerEstimatedHours: quote.estimatedHours,
+        },
+      });
+      if (!updated.count) {
+        throw new ConflictException('درخواست هم‌زمان توسط دیگری تغییر کرده است');
+      }
+
+      await tx.providerRequestInvitation.updateMany({
+        where: {
+          serviceRequestId: request.id,
+          providerProfileId: quote.providerProfileId,
+          status: 'PENDING',
+        },
+        data: { status: 'ACCEPTED', respondedAt: new Date() },
+      });
+      await tx.providerRequestInvitation.updateMany({
+        where: {
+          serviceRequestId: request.id,
+          providerProfileId: { not: quote.providerProfileId },
+          status: 'PENDING',
+        },
+        data: { status: 'WITHDRAWN', respondedAt: new Date() },
+      });
+
+      return { id: request.id, status: 'CUSTOMER_CONFIRMATION_PENDING' };
     });
   }
 
@@ -498,6 +648,9 @@ export class ServiceRequestController {
     budgetMin: number | null;
     budgetMax: number | null;
     providerPriceToman: number | null;
+    providerLaborPriceToman: number | null;
+    providerQuoteNote: string | null;
+    providerQuoteItems: unknown;
     providerPricingMode: 'QUOTE' | 'HOURLY' | null;
     providerHourlyRateToman: number | null;
     providerHourlyUnitLabel: string | null;
@@ -590,6 +743,9 @@ export class ServiceRequestController {
         request.budgetMax ??
         request.budgetMin ??
         undefined,
+      providerLaborPriceToman: request.providerLaborPriceToman ?? undefined,
+      providerQuoteNote: request.providerQuoteNote ?? undefined,
+      providerQuoteItems: request.providerQuoteItems,
       priceDetails:
         request.providerPricingMode === 'HOURLY'
           ? {

@@ -23,6 +23,7 @@ export interface SpecialtyRecord {
   pricingMode: 'QUOTE' | 'HOURLY';
   hourlyRateToman: number | null;
   hourlyUnitLabel: string | null;
+  allowsQuoteItems: boolean;
 }
 
 export interface CreateSpecialtyGroupInput {
@@ -54,6 +55,7 @@ export interface CreateSpecialtyInput {
   pricingMode?: 'QUOTE' | 'HOURLY';
   hourlyRateToman?: number | null;
   hourlyUnitLabel?: string | null;
+  allowsQuoteItems?: boolean;
 }
 
 export interface UpdateSpecialtyInput {
@@ -67,6 +69,7 @@ export interface UpdateSpecialtyInput {
   pricingMode?: 'QUOTE' | 'HOURLY';
   hourlyRateToman?: number | null;
   hourlyUnitLabel?: string | null;
+  allowsQuoteItems?: boolean;
 }
 
 export interface ISpecialtyRepository {

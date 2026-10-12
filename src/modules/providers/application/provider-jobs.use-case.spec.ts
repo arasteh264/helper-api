@@ -236,6 +236,9 @@ describe('ProviderJobsUseCase.list contact privacy', () => {
             ),
           ]),
       },
+      serviceRequestQuote: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       user: {
         findMany: jest.fn().mockResolvedValue([
           {

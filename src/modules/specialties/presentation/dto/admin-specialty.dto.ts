@@ -139,6 +139,12 @@ export class CreateSpecialtyDto {
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  allowsQuoteItems?: boolean;
 }
 
 export class UpdateSpecialtyDto {
@@ -202,4 +208,10 @@ export class UpdateSpecialtyDto {
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  allowsQuoteItems?: boolean;
 }

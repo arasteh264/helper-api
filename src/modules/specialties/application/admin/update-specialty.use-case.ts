@@ -23,6 +23,7 @@ export interface UpdateSpecialtyCommand {
   pricingMode?: 'QUOTE' | 'HOURLY';
   hourlyRateToman?: number;
   hourlyUnitLabel?: string;
+  allowsQuoteItems?: boolean;
   iconFile?: Express.Multer.File;
   removeIcon?: boolean;
 }
@@ -98,6 +99,7 @@ export class UpdateSpecialtyUseCase {
           command.pricingMode === 'QUOTE' ? null : command.hourlyRateToman,
         hourlyUnitLabel:
           command.pricingMode === 'QUOTE' ? null : command.hourlyUnitLabel,
+        allowsQuoteItems: command.allowsQuoteItems,
       });
     } catch (error) {
       if (uploadedIcon) {

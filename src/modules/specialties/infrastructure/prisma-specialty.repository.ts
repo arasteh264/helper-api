@@ -34,7 +34,17 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
   ): Promise<SpecialtyEntity[]> {
     const specialties = await this.prisma.specialty.findMany({
       where: { groupId, isActive: true },
-      include: {
+      select: {
+        id: true,
+        groupId: true,
+        name: true,
+        slug: true,
+        icon: true,
+        sortOrder: true,
+        isActive: true,
+        pricingMode: true,
+        hourlyRateToman: true,
+        hourlyUnitLabel: true,
         _count: {
           select: {
             providers: {
@@ -79,7 +89,17 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
     const groups = await this.prisma.specialtyGroup.findMany({
       include: {
         specialties: {
-          include: {
+          select: {
+            id: true,
+            groupId: true,
+            name: true,
+            slug: true,
+            icon: true,
+            sortOrder: true,
+            isActive: true,
+            pricingMode: true,
+            hourlyRateToman: true,
+            hourlyUnitLabel: true,
             _count: {
               select: {
                 providers: {
@@ -195,6 +215,7 @@ export class PrismaSpecialtyRepository implements ISpecialtyRepository {
         pricingMode: input.pricingMode ?? 'QUOTE',
         hourlyRateToman: input.hourlyRateToman ?? null,
         hourlyUnitLabel: input.hourlyUnitLabel ?? null,
+        allowsQuoteItems: input.allowsQuoteItems ?? false,
       },
     });
   }

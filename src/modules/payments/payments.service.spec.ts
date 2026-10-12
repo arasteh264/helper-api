@@ -354,7 +354,7 @@ describe('PaymentsService', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
-  it('releases Provider earnings only inside customer completion confirmation', async () => {
+  it('calculates commission from labor while releasing the full quote total', async () => {
     const tx = {
       serviceRequest: {
         findFirst: jest.fn().mockResolvedValue({
@@ -363,6 +363,7 @@ describe('PaymentsService', () => {
           customerId: 'customer-1',
           acceptedProviderProfileId: 'provider-profile-1',
           providerPriceToman: 500000,
+          providerLaborPriceToman: 300000,
           acceptedProviderProfile: { userId: 'provider-1' },
         }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -372,7 +373,7 @@ describe('PaymentsService', () => {
         update: jest
           .fn()
           .mockResolvedValueOnce({ balance: 500000 })
-          .mockResolvedValueOnce({ balance: 450000 }),
+          .mockResolvedValueOnce({ balance: 470000 }),
       },
       walletConfiguration: {
         upsert: jest.fn().mockResolvedValue({
@@ -411,7 +412,17 @@ describe('PaymentsService', () => {
         totalEarned: { increment: 500000 },
       },
     });
-    expect(result.releasedAmountToman).toBe(450000);
+    expect(tx.wallet.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'wallet-1' },
+      data: { balance: { decrement: 30000 } },
+    });
+    expect(tx.walletTransaction.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ amount: -30000 }),
+      }),
+    );
+    expect(result.releasedAmountToman).toBe(470000);
   });
 
   it('lets the customer withdraw an active dispute and confirm completion', async () => {
