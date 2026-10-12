@@ -8,6 +8,7 @@ import { AcceptServiceRequestDto } from '../../application/dto/accept-service-re
 import { CreateServiceRequestDisputeMessageDto } from '../../../payments/dto/create-service-request-dispute-message.dto';
 import { RaiseProviderNonPaymentDisputeDto } from '../../application/dto/raise-provider-non-payment-dispute.dto';
 import { DeclineServiceRequestDto } from '../../application/dto/decline-service-request.dto';
+import { SubmitServiceRequestQuoteDto } from '../../application/dto/submit-service-request-quote.dto';
 
 @ApiTags('Provider Jobs')
 @ApiBearerAuth()
@@ -20,6 +21,16 @@ export class ProviderJobsController {
   @Get()
   list(@CurrentUser() user: TokenPayload) {
     return this.providerJobsUseCase.list(user.userId);
+  }
+
+  @ApiOperation({ summary: 'Submit or update a price quote for a service request' })
+  @Post(':requestId/quote')
+  quote(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+    @Body() dto: SubmitServiceRequestQuoteDto,
+  ) {
+    return this.providerJobsUseCase.submitQuote(user.userId, requestId, dto);
   }
 
   @ApiOperation({ summary: 'Accept a service request' })

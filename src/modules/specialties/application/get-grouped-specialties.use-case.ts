@@ -85,6 +85,7 @@ export class GetGroupedSpecialtiesUseCase {
         hourlyUnitLabel,
         sortOrder,
         isActive,
+        allowsQuoteItems,
       }) => ({
         id,
         groupId,
@@ -96,6 +97,7 @@ export class GetGroupedSpecialtiesUseCase {
         hourlyUnitLabel,
         sortOrder,
         isActive,
+        allowsQuoteItems,
       }),
     );
   }

@@ -6,6 +6,9 @@ import { PASSWORD_HASHER } from '../domain/services/password-hasher.token';
 import type { OtpSender } from '../../auth/domain/services/otp-sender.port';
 import { OTP_SENDER } from '../../auth/domain/services/otp-sender.token';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import type { TokenGenerator } from '../../auth/domain/services/token-generator.port';
+import { TOKEN_GENERATOR } from '../../auth/domain/services/token-generator.token';
+import { User } from '../domain/entities/user.entity';
 
 interface CreateUserInput {
   name: string;
@@ -28,9 +31,16 @@ export class CreateUserUseCase {
     @Inject(OTP_SENDER)
     private readonly otpSender: OtpSender,
     private readonly prisma: PrismaService,
+    @Inject(TOKEN_GENERATOR)
+    private readonly tokenGenerator: TokenGenerator,
   ) {}
 
-  async execute(input: CreateUserInput): Promise<void> {
+  async execute(
+    input: CreateUserInput,
+  ): Promise<
+    | { registrationCompleted: true; accessToken: string }
+    | { registrationCompleted: false }
+  > {
     const existingUser = await this.userRepository.findByEmail(input.email);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
@@ -48,6 +58,27 @@ export class CreateUserUseCase {
     }
 
     const passwordHash = await this.passwordHasher.hash(input.password);
+    if (process.env.REQUIRE_REGISTRATION_OTP !== 'true') {
+      const user = User.create(
+        input.name,
+        input.email,
+        input.phone,
+        passwordHash,
+      );
+      await this.userRepository.save(user);
+      await this.prisma.pendingRegistration.deleteMany({
+        where: { phone: input.phone },
+      });
+
+      return {
+        registrationCompleted: true,
+        accessToken: this.tokenGenerator.generate({
+          userId: user.id,
+          role: user.role,
+        }),
+      };
+    }
+
     const otpCode = generateOtpCode();
     const otpExpiresAt = new Date(Date.now() + 90 * 1000);
     
@@ -70,5 +101,6 @@ export class CreateUserUseCase {
       },
     });
     await this.otpSender.send(input.email, otpCode, 90);
+    return { registrationCompleted: false };
   }
 }

@@ -59,6 +59,10 @@ export class CreateServiceRequestUseCase {
       input.title,
       input.description,
     );
+    const reviewSettings = await this.prisma.walletConfiguration.findUnique({
+      where: { id: 'global' },
+      select: { requireServiceRequestReview: true },
+    });
 
     if (
       input.budgetMin !== undefined &&
@@ -84,6 +88,9 @@ export class CreateServiceRequestUseCase {
         input.skillName,
       );
       request.addSkill(skill.id);
+    }
+    if (reviewSettings?.requireServiceRequestReview ?? true) {
+      request.holdForAdminReview();
     }
 
     await this.serviceRequestRepository.save(request);

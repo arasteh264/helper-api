@@ -140,7 +140,20 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
       include: {
         user: { select: { name: true, email: true, phone: true } },
         skills: { include: { skill: true } },
-        specialties: { include: { specialty: { include: { group: true } } } },
+        specialties: {
+          include: {
+            specialty: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                icon: true,
+                groupId: true,
+                group: { select: { name: true } },
+              },
+            },
+          },
+        },
       },
     });
 

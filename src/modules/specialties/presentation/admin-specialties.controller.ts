@@ -136,6 +136,7 @@ export class AdminSpecialtiesController {
       pricingMode: dto.pricingMode,
       hourlyRateToman: dto.hourlyRateToman,
       hourlyUnitLabel: dto.hourlyUnitLabel,
+      allowsQuoteItems: dto.allowsQuoteItems,
     });
   }
 
@@ -159,6 +160,7 @@ export class AdminSpecialtiesController {
       pricingMode: dto.pricingMode,
       hourlyRateToman: dto.hourlyRateToman,
       hourlyUnitLabel: dto.hourlyUnitLabel,
+      allowsQuoteItems: dto.allowsQuoteItems,
       removeIcon: dto.removeIcon,
     });
   }

@@ -12,7 +12,20 @@ import { PrismaService } from '../../../../infrastructure/database/prisma.servic
 const publicProviderListInclude = {
   user: { select: { name: true } },
   skills: { include: { skill: true } },
-  specialties: { include: { specialty: { include: { group: true } } } },
+  specialties: {
+    include: {
+      specialty: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          icon: true,
+          groupId: true,
+          group: { select: { name: true } },
+        },
+      },
+    },
+  },
   portfolioItems: {
     include: { images: { orderBy: { order: 'asc' } } },
     orderBy: { order: 'asc' },

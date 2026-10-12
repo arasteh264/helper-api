@@ -1,0 +1,3 @@
+-- These schema changes are already represented by the earlier migrations
+-- 20261008122000_add_admin_audit_logs and
+-- 20261009180000_add_admin_service_request_review.

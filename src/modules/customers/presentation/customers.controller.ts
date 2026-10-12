@@ -134,7 +134,7 @@ export class CustomersController {
   }
 
   private assertCustomer(user: TokenPayload) {
-    if (user.role !== 'CUSTOMER') {
+    if (user.role !== 'CUSTOMER' && user.role !== 'PROVIDER') {
       throw new ForbiddenException('این بخش فقط برای مشتریان در دسترس است');
     }
   }

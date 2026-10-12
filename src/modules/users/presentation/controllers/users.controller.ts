@@ -179,12 +179,20 @@ export class UsersController {
   @ApiOperation({ summary: 'Create a new user' })
   @Post()
   async createUser(@Body() dto: CreateUserDto) {
-    await this.createUserUseCase.execute({
+    const result = await this.createUserUseCase.execute({
       name: dto.name,
       email: dto.email,
       phone: dto.phone,
       password: dto.password,
     });
+
+    if (result.registrationCompleted) {
+      return {
+        message: 'Registration completed',
+        registrationCompleted: true,
+        accessToken: result.accessToken,
+      };
+    }
 
     return { message: 'OTP sent' };
   }

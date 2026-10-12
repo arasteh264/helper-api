@@ -68,30 +68,49 @@ enum ProviderDocumentType {
 }
 
 model User {
-  id                     String                         @id @default(uuid())
-  name                   String
-  email                  String                         @unique
-  phone                  String                         @unique
-  passwordHash           String?
-  role                   UserRole
-  status                 UserStatus
-  resetToken             String?
-  resetTokenExpiry       DateTime?
-  createdAt              DateTime                       @default(now())
-  updatedAt              DateTime                       @updatedAt
-  otpCode                String?
-  otpExpiresAt           DateTime?
-  providerProfile        ProviderProfile?
-  customerProfile        CustomerProfile?
-  serviceRequests        ServiceRequest[]               @relation("CustomerServiceRequests")
-  addresses              CustomerAddress[]
-  reviewsGiven           ServiceRequestReview[]         @relation("CustomerReviews")
-  sentChatMessages       ChatMessage[]                  @relation("ChatMessageSender")
-  moderatedChatMessages  ChatMessage[]                  @relation("ChatMessageModerator")
-  notificationPreference NotificationPreference?
-  notifications          Notification[]
-  disputeMessages        ServiceRequestDisputeMessage[]
+  id                            String                         @id @default(uuid())
+  name                          String
+  email                         String                         @unique
+  phone                         String                         @unique
+  passwordHash                  String?
+  role                          UserRole
+  status                        UserStatus
+  resetToken                    String?
+  resetTokenExpiry              DateTime?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  otpCode                       String?
+  otpExpiresAt                  DateTime?
+  providerProfile               ProviderProfile?
+  customerProfile               CustomerProfile?
+  serviceRequests               ServiceRequest[]               @relation("CustomerServiceRequests")
+  addresses                     CustomerAddress[]
+  reviewsGiven                  ServiceRequestReview[]         @relation("CustomerReviews")
+  sentChatMessages              ChatMessage[]                  @relation("ChatMessageSender")
+  moderatedChatMessages         ChatMessage[]                  @relation("ChatMessageModerator")
+  notificationPreference        NotificationPreference?
+  notifications                 Notification[]
+  disputeMessages               ServiceRequestDisputeMessage[]
   providerOnboardingInvitations ProviderOnboardingInvitation[] @relation("ProviderOnboardingInvitationCreator")
+  adminActions                  AdminAuditLog[]                @relation("AdminAuditActor")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  action      String
+  targetType  String
+  targetId    String
+  reason      String   @db.Text
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
 }
 
 model ProviderOnboardingInvitation {
@@ -221,6 +240,7 @@ model ProviderProfile {
   documents               ProviderDocument[]
   portfolioItems          PortfolioItem[]
   acceptedServiceRequests ServiceRequest[]            @relation("AcceptedServiceRequests")
+  quotes                  ServiceRequestQuote[]
   requestDeclines         ProviderRequestDecline[]
   requestInvitations      ProviderRequestInvitation[]
   wallet                  Wallet?
@@ -254,6 +274,7 @@ model Specialty {
   pricingMode     SpecialtyPricingMode @default(QUOTE)
   hourlyRateToman Int?
   hourlyUnitLabel String?
+  allowsQuoteItems Boolean              @default(false)
   sortOrder       Int                  @default(0)
   isActive        Boolean              @default(true)
   createdAt       DateTime             @default(now())
@@ -326,6 +347,7 @@ model ProviderSkill {
 }
 
 enum ServiceRequestStatus {
+  PENDING_ADMIN_REVIEW
   OPEN
   OFFER_ACCEPTED
   CUSTOMER_CONFIRMATION_PENDING
@@ -363,6 +385,9 @@ model ServiceRequest {
   acceptedProviderProfileId    String?
   specialtyId                  String?
   providerPriceToman           Int?
+  providerLaborPriceToman      Int?
+  providerQuoteNote            String?               @db.Text
+  providerQuoteItems           Json                  @default("[]")
   providerPricingMode          SpecialtyPricingMode?
   providerHourlyRateToman      Int?
   providerHourlyUnitLabel      String?
@@ -378,6 +403,7 @@ model ServiceRequest {
   disputeReason                DisputeReason?
   disputeDescription           String?               @db.Text
   disputeUpdatedAt             DateTime?
+  adminReviewNote              String?               @db.Text
 
   address   String?
   latitude  Float?
@@ -393,6 +419,7 @@ model ServiceRequest {
 
   skills                  ServiceRequestSkill[]
   specialty               Specialty?                     @relation(fields: [specialtyId], references: [id])
+  quotes                  ServiceRequestQuote[]
   images                  ServiceRequestImage[]
   acceptedProviderProfile ProviderProfile?               @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
   customer                User                           @relation("CustomerServiceRequests", fields: [customerId], references: [id], onDelete: Cascade)
@@ -406,6 +433,28 @@ model ServiceRequest {
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
   @@index([customerId, status, createdAt, id])
+}
+
+model ServiceRequestQuote {
+  id                String               @id @default(uuid())
+  serviceRequestId  String
+  providerProfileId String
+  laborPriceToman   Int
+  totalPriceToman   Int
+  quoteNote         String               @db.Text
+  estimatedHours    Float?
+  pricingMode       SpecialtyPricingMode
+  hourlyRateToman   Int?
+  hourlyUnitLabel   String?
+  items             Json                 @default("[]")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceRequestId, providerProfileId])
+  @@index([serviceRequestId, createdAt])
 }
 
 model ServiceRequestDisputeMessage {
@@ -659,10 +708,11 @@ model PortfolioItemImage {
 }
 
 model WalletConfiguration {
-  id             String   @id @default("global")
-  commissionRate Float    @default(10)
-  minWithdrawal  Int      @default(100000)
-  updatedAt      DateTime @updatedAt
+  id                          String   @id @default("global")
+  commissionRate              Float    @default(10)
+  minWithdrawal               Int      @default(100000)
+  requireServiceRequestReview Boolean  @default(true)
+  updatedAt                   DateTime @updatedAt
 }
 
 enum ProviderInvitationStatus {
