@@ -52,6 +52,12 @@ secrets; never commit their values.
 Apply the `add_provider_onboarding_invitations` Prisma migration before enabling
 the invitation endpoint.
 
+Customer registration completes without OTP by default. Set
+`REQUIRE_REGISTRATION_OTP=true` to require OTP again from `POST /users`. Without
+OTP, the response contains an `accessToken` and `registrationCompleted: true`,
+which lets the client sign the new user in and skip its OTP screen. This setting
+does not disable OTP for login.
+
 ## Admin operations and service request review
 
 The admin dashboard uses `/admin/operations/alerts` and `/admin/audit-logs`.
