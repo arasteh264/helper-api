@@ -2,8 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
 
-const require = createRequire(__filename);
-const { createApp } = require('../dist/src/app-factory.js') as {
+const moduleRequire = createRequire(__filename);
+const { createApp } = moduleRequire('../dist/src/app-factory.js') as {
   createApp: () => Promise<INestApplication>;
 };
 let appPromise: Promise<INestApplication> | undefined;
