@@ -67,6 +67,33 @@ enum ProviderDocumentType {
   OTHER
 }
 
+enum ProviderStoryMediaType {
+  IMAGE
+  VIDEO
+}
+
+enum ProviderStoryStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ProviderStoryMonetizationStatus {
+  FREE
+  PENDING_ADMIN_SETUP
+  PAYMENT_REQUIRED
+  PAID
+}
+
+enum ProviderStoryApprovalAction {
+  APPROVE
+  REJECT
+  FLAG
+  SET_PRICING
+}
+
 model User {
   id                            String                         @id @default(uuid())
   name                          String
@@ -88,11 +115,17 @@ model User {
   reviewsGiven                  ServiceRequestReview[]         @relation("CustomerReviews")
   sentChatMessages              ChatMessage[]                  @relation("ChatMessageSender")
   moderatedChatMessages         ChatMessage[]                  @relation("ChatMessageModerator")
+  providerStoryConversations    ProviderStoryConversation[]    @relation("ProviderStoryCustomer")
+  providerStoryMessages         ProviderStoryMessage[]        @relation("ProviderStoryMessageSender")
   notificationPreference        NotificationPreference?
   notifications                 Notification[]
   disputeMessages               ServiceRequestDisputeMessage[]
   providerOnboardingInvitations ProviderOnboardingInvitation[] @relation("ProviderOnboardingInvitationCreator")
   adminActions                  AdminAuditLog[]                @relation("AdminAuditActor")
+  storiesReviewed               ProviderStory[]
+  storyApprovalLogs             ProviderStoryApprovalLog[]     @relation("ProviderStoryApprovalLogs")
+  storyPaymentApprovals         ProviderStoryPayment[]         @relation("ProviderStoryPaymentApprovals")
+  storyPayments                 ProviderStoryPayment[]         @relation("ProviderStoryPayments")
 }
 
 model AdminAuditLog {
@@ -246,6 +279,11 @@ model ProviderProfile {
   wallet                  Wallet?
   bankAccount             ProviderBankAccount?
   reviews                 ServiceRequestReview[]      @relation("ProviderReviews")
+  stories                 ProviderStory[]
+  storyConversations      ProviderStoryConversation[]
+  storyPayments           ProviderStoryPayment[]      @relation("ProviderStoryProfilePayments")
+  canPublishStories       Boolean                     @default(false)
+  canViewStoryStats       Boolean                     @default(false)
 }
 
 model SpecialtyGroup {
@@ -265,24 +303,25 @@ model SpecialtyGroup {
 }
 
 model Specialty {
-  id              String               @id @default(uuid())
-  groupId         String
-  name            String
-  slug            String               @unique
-  icon            String?
-  iconPublicId    String?
-  pricingMode     SpecialtyPricingMode @default(QUOTE)
-  hourlyRateToman Int?
-  hourlyUnitLabel String?
+  id               String               @id @default(uuid())
+  groupId          String
+  name             String
+  slug             String               @unique
+  icon             String?
+  iconPublicId     String?
+  pricingMode      SpecialtyPricingMode @default(QUOTE)
+  hourlyRateToman  Int?
+  hourlyUnitLabel  String?
   allowsQuoteItems Boolean              @default(false)
-  sortOrder       Int                  @default(0)
-  isActive        Boolean              @default(true)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  sortOrder        Int                  @default(0)
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   group           SpecialtyGroup      @relation(fields: [groupId], references: [id])
   providers       ProviderSpecialty[]
   serviceRequests ServiceRequest[]
+  providerStories ProviderStory[]
 
   @@index([groupId, sortOrder])
 }
@@ -602,6 +641,7 @@ enum WalletTransactionType {
   PAYOUT_REQUEST // کسر موجودی بابت درخواست برداشت
   PAYOUT_REFUND // برگشت پول درخواست رد یا لغو شده
   ADJUSTMENT // اصلاح دستی توسط ادمین
+  STORY_PROMOTION // هزینه‌ی انتشار استوری
 }
 
 enum PayoutStatus {
@@ -636,7 +676,8 @@ model WalletTransaction {
   payoutRequestId  String?
   createdAt        DateTime              @default(now())
 
-  wallet Wallet @relation(fields: [walletId], references: [id])
+  wallet               Wallet                @relation(fields: [walletId], references: [id])
+  providerStoryPayment ProviderStoryPayment?
 
   // جلوگیری از واریز دوباره برای یک کار (NULLها در Postgres با هم تداخل ندارن)
   @@unique([walletId, type, serviceRequestId])
@@ -712,6 +753,7 @@ model WalletConfiguration {
   commissionRate              Float    @default(10)
   minWithdrawal               Int      @default(100000)
   requireServiceRequestReview Boolean  @default(true)
+  storyVideoMaxSizeMB         Int      @default(100)
   updatedAt                   DateTime @updatedAt
 }
 
@@ -804,4 +846,144 @@ model CustomerAddress {
   customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId, isDefault, createdAt])
+}
+
+model ProviderStory {
+  id                 String                          @id @default(uuid())
+  providerProfileId  String
+  title              String
+  description        String?                         @db.Text
+  specialtyId        String?
+  overlayText        String?                         @db.VarChar(120)
+  overlayColor       String                          @default("#ffffff")
+  overlayFontSize    Int                             @default(28)
+  overlayPositionX   Float                           @default(50)
+  overlayPositionY   Float                           @default(50)
+  mediaType          ProviderStoryMediaType
+  mediaUrl           String
+  mediaPublicId      String?
+  thumbnailUrl       String?
+  thumbnailPublicId  String?
+  durationSeconds    Int?
+  status             ProviderStoryStatus             @default(DRAFT)
+  isPaid             Boolean                         @default(false)
+  priceToman         Int?
+  monetizationStatus ProviderStoryMonetizationStatus @default(FREE)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedByAdminId  String?
+  rejectionReason    String?                         @db.Text
+  expiresAt          DateTime?
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+
+  providerProfile ProviderProfile            @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  specialty       Specialty?                 @relation(fields: [specialtyId], references: [id], onDelete: SetNull)
+  reviewedByAdmin User?                      @relation(fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+  views           ProviderStoryView[]
+  approvalLogs    ProviderStoryApprovalLog[]
+  stats           ProviderStoryStat?
+  payments        ProviderStoryPayment[]
+  conversations   ProviderStoryConversation[]
+
+  @@index([providerProfileId, status, createdAt])
+  @@index([specialtyId])
+  @@index([status, expiresAt, createdAt])
+  @@index([createdAt])
+}
+
+model ProviderStoryConversation {
+  id                String   @id @default(uuid())
+  storyId           String
+  customerUserId    String
+  providerProfileId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  story           ProviderStory        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  customer        User                 @relation("ProviderStoryCustomer", fields: [customerUserId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile      @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  messages        ProviderStoryMessage[]
+
+  @@unique([storyId, customerUserId])
+  @@index([providerProfileId, updatedAt])
+  @@index([customerUserId, updatedAt])
+}
+
+model ProviderStoryMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderUserId   String
+  body           String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation ProviderStoryConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                      @relation("ProviderStoryMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([senderUserId, createdAt])
+}
+
+model ProviderStoryView {
+  id           String   @id @default(uuid())
+  storyId      String
+  viewerUserId String?
+  viewerType   String // CUSTOMER, ADMIN, GUEST
+  ipAddress    String?
+  viewedAt     DateTime @default(now())
+
+  story ProviderStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId, viewedAt])
+  @@index([viewerUserId, viewedAt])
+}
+
+model ProviderStoryApprovalLog {
+  id        String                      @id @default(uuid())
+  storyId   String
+  adminId   String
+  action    ProviderStoryApprovalAction
+  comment   String?                     @db.Text
+  createdAt DateTime                    @default(now())
+
+  story ProviderStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  admin User          @relation("ProviderStoryApprovalLogs", fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([storyId, createdAt])
+  @@index([adminId, createdAt])
+}
+
+model ProviderStoryStat {
+  storyId       String   @id
+  viewsCount    Int      @default(0)
+  uniqueViewers Int      @default(0)
+  lastUpdatedAt DateTime @default(now())
+
+  story ProviderStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+}
+
+model ProviderStoryPayment {
+  id                  String    @id @default(uuid())
+  storyId             String?   @unique
+  storyTitle          String
+  providerProfileId   String?
+  priceToman          Int
+  paidByAdminId       String?
+  paidByUserId        String?
+  walletTransactionId String?   @unique
+  status              String    @default("PENDING") // PENDING, PAID, REJECTED
+  approvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  story             ProviderStory?     @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  paidByAdmin       User?              @relation("ProviderStoryPaymentApprovals", fields: [paidByAdminId], references: [id], onDelete: SetNull)
+  providerProfile   ProviderProfile?   @relation("ProviderStoryProfilePayments", fields: [providerProfileId], references: [id], onDelete: SetNull)
+  paidByUser        User?              @relation("ProviderStoryPayments", fields: [paidByUserId], references: [id], onDelete: SetNull)
+  walletTransaction WalletTransaction? @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([storyId, createdAt])
+  @@index([status, createdAt])
 }

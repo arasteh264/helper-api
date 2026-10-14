@@ -40,17 +40,38 @@ import { ProviderOnboardingController } from './presentation/controllers/provide
 import { ProviderOnboardingService } from './application/provider-onboarding.service';
 import { SmsModule } from '../sms/sms.module';
 import { TokenModule } from '../auth/token.module';
+import { ProviderStoriesService } from './application/services/provider-stories.service';
+import { PublicProviderStoriesService } from './application/services/public-provider-stories.service';
+import { ProviderStoriesController } from './presentation/controllers/provider-stories.controller';
+import { PublicProviderStoriesController } from './presentation/controllers/public-provider-stories.controller';
+import { ProviderStoryChatController } from './presentation/controllers/provider-story-chat.controller';
+import { ProviderStoryChatService } from './application/services/provider-story-chat.service';
 
 @Module({
-  imports: [StorageModule, UsersModule, NotificationsModule, SmsModule, TokenModule],
+  imports: [
+    StorageModule,
+    UsersModule,
+    NotificationsModule,
+    SmsModule,
+    TokenModule,
+  ],
   controllers: [
     ProviderProfileController,
     AdminProviderController,
     ProviderOnboardingController,
     ProviderJobsController,
     PublicProvidersController,
+    // provider stories
+    ProviderStoriesController,
+    PublicProviderStoriesController,
+    ProviderStoryChatController,
   ],
   providers: [
+    // provider stories
+    ProviderStoriesService,
+    PublicProviderStoriesService,
+    ProviderStoryChatService,
+
     CreateProviderProfileUseCase,
     AddSkillToProviderUseCase,
     GetMyProviderProfileUseCase,
@@ -89,6 +110,10 @@ import { TokenModule } from '../auth/token.module';
       useClass: PrismaProviderDocumentRepository,
     },
   ],
-  exports: [SKILL_REPOSITORY],
+  exports: [
+    SKILL_REPOSITORY,
+    ProviderStoriesService,
+    PublicProviderStoriesService,
+  ],
 })
 export class ProvidersModule {}
