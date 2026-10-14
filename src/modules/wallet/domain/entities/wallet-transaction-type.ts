@@ -4,6 +4,7 @@ export const WalletTransactionType = {
   PAYOUT_REQUEST: 'PAYOUT_REQUEST',
   PAYOUT_REFUND: 'PAYOUT_REFUND',
   ADJUSTMENT: 'ADJUSTMENT',
+  STORY_PROMOTION: 'STORY_PROMOTION',
 } as const;
 
 export type WalletTransactionType =
