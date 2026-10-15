@@ -15,6 +15,28 @@ import { SmsService } from '../../sms/sms.service';
 import { CompleteProviderOnboardingDto } from './dto/complete-provider-onboarding.dto';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const INVITATION_SEND_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  callback: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, values.length) },
+      async () => {
+        while (nextIndex < values.length) {
+          const index = nextIndex++;
+          results[index] = await callback(values[index]);
+        }
+      },
+    ),
+  );
+  return results;
+}
 
 function normalizePhone(value: string): string {
   const asciiDigits = value
@@ -47,7 +69,12 @@ export class ProviderOnboardingService {
     private readonly smsService: SmsService,
   ) {}
 
-  async createInvitation(phoneInput: string, adminId: string) {
+  async createInvitation(
+    phoneInput: string,
+    adminId: string,
+    candidate: { name?: string; specialty?: string } = {},
+    resendPending = false,
+  ) {
     const phone = normalizePhone(phoneInput);
     const configuredUrl = process.env.PROVIDER_ONBOARDING_URL;
     if (process.env.NODE_ENV === 'production' && !configuredUrl) {
@@ -74,6 +101,23 @@ export class ProviderOnboardingService {
     }
 
     const now = new Date();
+    const existingInvitation =
+      await this.prisma.providerOnboardingInvitation.findFirst({
+        where: {
+          phone,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+    if (existingInvitation && !resendPending) {
+      throw new ConflictException(
+        'برای این شماره دعوت‌نامه فعال ارسال شده است؛ از گزینه یادآوری استفاده کنید',
+      );
+    }
+
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
     const invitation = await this.prisma.$transaction(async (tx) => {
@@ -90,6 +134,8 @@ export class ProviderOnboardingService {
       return tx.providerOnboardingInvitation.create({
         data: {
           phone,
+          candidateName: candidate.name?.trim() || null,
+          specialty: candidate.specialty?.trim() || null,
           tokenHash: hashToken(token),
           expiresAt,
           createdById: adminId,
@@ -102,7 +148,12 @@ export class ProviderOnboardingService {
       onboardingUrl.searchParams.set('token', token);
       await this.smsService.sendNotification(
         phone,
-        `برای تکمیل ثبت‌نام همکاری با هلپر، فرم اطلاعات و مدارک را از لینک زیر تکمیل کنید. اعتبار لینک ۷ روز است:\n${onboardingUrl.toString()}`,
+        this.buildInvitationMessage(
+          onboardingUrl.toString(),
+          candidate.name,
+          candidate.specialty,
+          resendPending,
+        ),
       );
       await this.prisma.providerOnboardingInvitation.update({
         where: { id: invitation.id },
@@ -117,9 +168,183 @@ export class ProviderOnboardingService {
     }
 
     return {
-      message: 'لینک دعوت برای متخصص پیامک شد',
+      message: resendPending
+        ? 'یادآوری دعوت‌نامه برای متخصص پیامک شد'
+        : 'لینک دعوت برای متخصص پیامک شد',
+      id: invitation.id,
+      phone,
       expiresAt: invitation.expiresAt,
     };
+  }
+
+  async createInvitationBatch(
+    items: { phone: string; name?: string; specialty?: string }[],
+    adminId: string,
+  ) {
+    const seenPhones = new Set<string>();
+    const prepared: {
+      phone: string;
+      name?: string;
+      specialty?: string;
+      duplicate?: boolean;
+      invalidMessage?: string;
+    }[] = [];
+
+    for (const item of items) {
+      try {
+        const normalizedPhone = normalizePhone(item.phone);
+        const duplicate = seenPhones.has(normalizedPhone);
+        if (!duplicate) seenPhones.add(normalizedPhone);
+        prepared.push({ ...item, phone: normalizedPhone, duplicate });
+      } catch (error) {
+        prepared.push({
+          ...item,
+          invalidMessage:
+            error instanceof Error ? error.message : 'شماره موبایل معتبر نیست',
+        });
+      }
+    }
+
+    const results = await mapWithConcurrency(
+      prepared,
+      INVITATION_SEND_CONCURRENCY,
+      async (item) => {
+        if (item.invalidMessage) {
+          return {
+            phone: item.phone,
+            success: false,
+            message: item.invalidMessage,
+          };
+        }
+        if (item.duplicate) {
+          return {
+            phone: item.phone,
+            success: false,
+            message: 'این شماره در فایل تکراری است',
+          };
+        }
+
+        try {
+          const invitation = await this.createInvitation(
+            item.phone,
+            adminId,
+            { name: item.name, specialty: item.specialty },
+          );
+          return { ...invitation, success: true };
+        } catch (error) {
+          return {
+            phone: item.phone,
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'ارسال دعوت‌نامه ناموفق بود',
+          };
+        }
+      },
+    );
+
+    return {
+      total: results.length,
+      sent: results.filter((result) => result.success).length,
+      failed: results.filter((result) => !result.success).length,
+      items: results,
+    };
+  }
+
+  async remindInvitations(invitationIds: string[], adminId: string) {
+    const results = await mapWithConcurrency(
+      invitationIds,
+      INVITATION_SEND_CONCURRENCY,
+      async (id) => {
+        try {
+          const result = await this.remindInvitation(id, adminId);
+          return { id, phone: result.phone, success: true, message: result.message };
+        } catch (error) {
+          return {
+            id,
+            phone: '',
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'ارسال یادآوری دعوت‌نامه ناموفق بود',
+          };
+        }
+      },
+    );
+    return {
+      total: results.length,
+      sent: results.filter((result) => result.success).length,
+      failed: results.filter((result) => !result.success).length,
+      items: results,
+    };
+  }
+
+  async remindInvitation(invitationId: string, adminId: string) {
+    const invitation =
+      await this.prisma.providerOnboardingInvitation.findUnique({
+        where: { id: invitationId },
+        select: {
+          id: true,
+          phone: true,
+          candidateName: true,
+          specialty: true,
+          usedAt: true,
+          revokedAt: true,
+        },
+      });
+    if (!invitation || invitation.usedAt) {
+      throw new NotFoundException('دعوت ثبت‌نام‌نشده پیدا نشد');
+    }
+
+    const latestInvitation =
+      await this.prisma.providerOnboardingInvitation.findFirst({
+        where: {
+          phone: invitation.phone,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+    if (latestInvitation?.id !== invitation.id) {
+      throw new ConflictException('این دعوت‌نامه دیگر فعال نیست');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phone: invitation.phone },
+      select: { id: true },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        'این شماره قبلاً ثبت‌نام کرده است و امکان ارسال یادآوری ندارد',
+      );
+    }
+
+    return this.createInvitation(
+      invitation.phone,
+      adminId,
+      {
+        name: invitation.candidateName ?? undefined,
+        specialty: invitation.specialty ?? undefined,
+      },
+      true,
+    );
+  }
+
+  private buildInvitationMessage(
+    onboardingUrl: string,
+    name?: string,
+    specialty?: string,
+    isReminder = false,
+  ): string {
+    const greeting = name?.trim() ? `سلام ${name.trim()}، ` : 'سلام، ';
+    const specialtyText = specialty?.trim()
+      ? ` ثبت‌نام شما برای تخصص ${specialty.trim()} است.`
+      : '';
+    const action = isReminder
+      ? 'برای تکمیل ثبت‌نام همکاری با هلپر، فرم اطلاعات و مدارک را از لینک زیر تکمیل کنید'
+      : 'از شما برای همکاری با هلپر دعوت می‌کنیم؛ فرم اطلاعات و مدارک را از لینک زیر تکمیل کنید';
+    return `${greeting}${action}.${specialtyText} اعتبار لینک ۷ روز است:\n${onboardingUrl}`;
   }
 
   async completeOnboarding(input: CompleteProviderOnboardingDto) {

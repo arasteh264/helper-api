@@ -31,6 +31,17 @@ enum BlogPostStatus {
   PUBLISHED
 }
 
+enum ProviderArticleStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+}
+
 enum NotificationCategory {
   MESSAGES
   WORK_UPDATES
@@ -126,6 +137,9 @@ model User {
   storyApprovalLogs             ProviderStoryApprovalLog[]     @relation("ProviderStoryApprovalLogs")
   storyPaymentApprovals         ProviderStoryPayment[]         @relation("ProviderStoryPaymentApprovals")
   storyPayments                 ProviderStoryPayment[]         @relation("ProviderStoryPayments")
+  articleRatings                ProviderArticleRating[]
+  articlesReviewed              ProviderArticle[]              @relation("ProviderArticleReviewer")
+  invoices                      Invoice[]
 }
 
 model AdminAuditLog {
@@ -147,15 +161,17 @@ model AdminAuditLog {
 }
 
 model ProviderOnboardingInvitation {
-  id          String    @id @default(uuid())
-  phone       String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  usedAt      DateTime?
-  revokedAt   DateTime?
-  smsSentAt   DateTime?
-  createdAt   DateTime  @default(now())
-  createdById String
+  id              String    @id @default(uuid())
+  phone           String
+  candidateName   String?
+  specialty       String?
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  revokedAt       DateTime?
+  smsSentAt       DateTime?
+  createdAt       DateTime  @default(now())
+  createdById     String
 
   createdBy User @relation("ProviderOnboardingInvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
@@ -191,6 +207,74 @@ model BlogPost {
   @@index([status, updatedAt(sort: Desc)])
 }
 
+model ProviderArticle {
+  id                String               @id @default(uuid())
+  providerProfileId String
+  slug              String               @unique
+  title             String
+  excerpt           String               @db.VarChar(320)
+  content           Json
+  coverImage        String?
+  coverPublicId     String?
+  coverAlt          String?
+  readingMinutes    Int                  @default(1)
+  status            ProviderArticleStatus @default(PENDING_REVIEW)
+  reviewNote        String?              @db.Text
+  reviewedById      String?
+  reviewedAt        DateTime?
+  publishedAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  providerProfile ProviderProfile          @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  reviewedBy      User?                    @relation("ProviderArticleReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  categories      ProviderArticleCategory[]
+  specialties     ProviderArticleSpecialty[]
+  ratings         ProviderArticleRating[]
+
+  @@index([status, publishedAt(sort: Desc), id])
+  @@index([providerProfileId, updatedAt(sort: Desc)])
+}
+
+model ProviderArticleCategory {
+  articleId       String
+  specialtyGroupId String
+
+  article       ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  specialtyGroup SpecialtyGroup @relation(fields: [specialtyGroupId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, specialtyGroupId])
+  @@index([specialtyGroupId])
+}
+
+model ProviderArticleSpecialty {
+  articleId   String
+  specialtyId String
+
+  article   ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  specialty Specialty      @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, specialtyId])
+  @@index([specialtyId])
+}
+
+model ProviderArticleRating {
+  id        String   @id @default(uuid())
+  articleId String
+  userId    String
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  article ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId])
+  @@index([articleId, createdAt])
+  @@index([userId, createdAt])
+}
+
 model NotificationPreference {
   id                 String   @id @default(uuid())
   userId             String   @unique
@@ -223,16 +307,19 @@ model Notification {
   title            String
   body             String               @db.Text
   serviceRequestId String?
+  invoiceId        String?
   chatMessageId    String?
   createdAt        DateTime             @default(now())
   readAt           DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   chatMessage ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt, id])
   @@index([userId, readAt])
   @@index([chatMessageId])
+  @@index([invoiceId])
 }
 
 model PendingRegistration {
@@ -282,6 +369,8 @@ model ProviderProfile {
   stories                 ProviderStory[]
   storyConversations      ProviderStoryConversation[]
   storyPayments           ProviderStoryPayment[]      @relation("ProviderStoryProfilePayments")
+  articles                ProviderArticle[]
+  invoices                Invoice[]
   canPublishStories       Boolean                     @default(false)
   canViewStoryStats       Boolean                     @default(false)
 }
@@ -298,6 +387,7 @@ model SpecialtyGroup {
   updatedAt    DateTime @updatedAt
 
   specialties Specialty[]
+  articleLinks ProviderArticleCategory[]
 
   @@index([sortOrder])
 }
@@ -322,6 +412,7 @@ model Specialty {
   providers       ProviderSpecialty[]
   serviceRequests ServiceRequest[]
   providerStories ProviderStory[]
+  articleLinks    ProviderArticleSpecialty[]
 
   @@index([groupId, sortOrder])
 }
@@ -468,10 +559,32 @@ model ServiceRequest {
   review                  ServiceRequestReview?
   chatConversation        ChatConversation?
   disputeMessages         ServiceRequestDisputeMessage[]
+  invoice                 Invoice?
 
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
   @@index([customerId, status, createdAt, id])
+}
+
+model Invoice {
+  id                String        @id @default(uuid())
+  serviceRequestId  String        @unique
+  customerId        String
+  providerProfileId String
+  items             Json
+  totalToman        Int
+  status            InvoiceStatus @default(DRAFT)
+  sentAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  customer        User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  notifications   Notification[]
+
+  @@index([customerId, status, createdAt(sort: Desc)])
+  @@index([providerProfileId, createdAt(sort: Desc)])
 }
 
 model ServiceRequestQuote {

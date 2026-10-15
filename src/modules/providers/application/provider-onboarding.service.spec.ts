@@ -36,6 +36,8 @@ describe('ProviderOnboardingService', () => {
         callback(tx),
       ),
       providerOnboardingInvitation: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue(undefined),
       },
     };
@@ -62,13 +64,19 @@ describe('ProviderOnboardingService', () => {
       'https://customer.example.test/provider/onboarding';
     const { service, prisma, tx, smsService } = createService();
 
-    await service.createInvitation('+98 912 123 4567', 'admin-1');
+    await service.createInvitation(
+      '+98 912 123 4567',
+      'admin-1',
+      { name: 'علی رضایی', specialty: 'تعمیر پکیج' },
+    );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.providerOnboardingInvitation.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           phone: '09121234567',
+          candidateName: 'علی رضایی',
+          specialty: 'تعمیر پکیج',
           createdById: 'admin-1',
           tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         }),
@@ -86,6 +94,8 @@ describe('ProviderOnboardingService', () => {
     expect(token).toMatch(/^[a-f0-9]{64}$/);
     expect(storedHash).toBe(createHash('sha256').update(token!).digest('hex'));
     expect(storedHash).not.toBe(token);
+    expect(message).toContain('علی رضایی');
+    expect(message).toContain('تعمیر پکیج');
   });
 
   it('revokes an invitation if the SMS provider fails', async () => {
@@ -113,5 +123,42 @@ describe('ProviderOnboardingService', () => {
       service.createInvitation('12345', 'admin-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not create a duplicate active invitation for the same phone', async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.PROVIDER_ONBOARDING_URL =
+      'https://customer.example.test/provider/onboarding';
+    const { service, prisma } = createService();
+    prisma.providerOnboardingInvitation.findFirst.mockResolvedValue({
+      id: 'active-invitation',
+    });
+
+    await expect(
+      service.createInvitation('09121234567', 'admin-1'),
+    ).rejects.toThrow('از گزینه یادآوری استفاده کنید');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('reports duplicate phone numbers in a bulk invite without resending', async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.PROVIDER_ONBOARDING_URL =
+      'https://customer.example.test/provider/onboarding';
+    const { service, smsService } = createService();
+
+    const result = await service.createInvitationBatch(
+      [
+        { phone: '09121234567', name: 'علی', specialty: 'برق' },
+        { phone: '+98 912 123 4567', name: 'علی', specialty: 'برق' },
+      ],
+      'admin-1',
+    );
+
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    expect(smsService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(result.items[1]).toMatchObject({
+      success: false,
+      message: 'این شماره در فایل تکراری است',
+    });
   });
 });
