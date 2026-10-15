@@ -103,12 +103,11 @@ $ npm run test:cov
 
 ## Deployment
 
-For Vercel, set the project root to this repository and use the checked-in
-`vercel.json`. Deployment runs `npm ci` and `npm run build`, then routes API
-requests through one Node.js function that reuses the initialized Nest
-application. The runtime is pinned to Node.js 22. Set required server-side
-environment variables, including `DATABASE_URL` and `JWT_SECRET`, in Vercel
-Project Settings before deploying.
+Vercel detects the NestJS application from `src/main.ts` and deploys it as a
+single Node.js Function. Keep `NestFactory.create(AppModule)` in this entrypoint
+so Vercel can identify the application. Set the project root to this repository,
+use Node.js 22, and configure required server-side environment variables,
+including `DATABASE_URL` and `JWT_SECRET`, in Vercel Project Settings.
 
 Apply pending Prisma migrations separately before or during a planned release:
 
