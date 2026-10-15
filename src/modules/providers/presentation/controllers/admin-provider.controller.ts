@@ -36,6 +36,8 @@ import { CreateProviderInvitationDto } from '../../application/dto/create-provid
 import { ProviderOnboardingService } from '../../application/provider-onboarding.service';
 import { SmsService } from '../../../sms/sms.service';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
+import { CreateProviderInvitationBatchDto } from '../../application/dto/create-provider-invitation-batch.dto';
+import { RemindProviderInvitationBatchDto } from '../../application/dto/remind-provider-invitation-batch.dto';
 
 @ApiTags('Admin - Providers')
 @ApiBearerAuth()
@@ -65,6 +67,115 @@ export class AdminProviderController {
   ) {
     return this.providerOnboardingService.createInvitation(
       dto.phone,
+      currentUser.userId,
+      { name: dto.name, specialty: dto.specialty },
+    );
+  }
+
+  @ApiOperation({ summary: 'Send provider invitations from an imported list' })
+  @Post('invitations/batch')
+  createInvitationBatch(
+    @CurrentUser() currentUser: TokenPayload,
+    @Body() dto: CreateProviderInvitationBatchDto,
+  ) {
+    return this.providerOnboardingService.createInvitationBatch(
+      dto.items,
+      currentUser.userId,
+    );
+  }
+
+  @ApiOperation({ summary: 'List invited and registered providers' })
+  @Get('invitations')
+  async listInvitations() {
+    const invitations =
+      await this.prisma.providerOnboardingInvitation.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 5000,
+        select: {
+          id: true,
+          phone: true,
+          candidateName: true,
+          specialty: true,
+          createdAt: true,
+          smsSentAt: true,
+          expiresAt: true,
+          usedAt: true,
+          revokedAt: true,
+        },
+      });
+
+    const latestByPhone = new Map<
+      string,
+      (typeof invitations)[number]
+    >();
+    for (const invitation of invitations) {
+      if (!latestByPhone.has(invitation.phone)) {
+        latestByPhone.set(invitation.phone, invitation);
+      }
+    }
+
+    const latestInvitations = [...latestByPhone.values()];
+    const users = latestInvitations.length
+      ? await this.prisma.user.findMany({
+          where: { phone: { in: latestInvitations.map(({ phone }) => phone) } },
+          select: {
+            phone: true,
+            name: true,
+            role: true,
+            createdAt: true,
+            providerProfile: {
+              select: { verificationStatus: true },
+            },
+          },
+        })
+      : [];
+    const usersByPhone = new Map(users.map((user) => [user.phone, user]));
+
+    return {
+      items: latestInvitations.map((invitation) => {
+        const user = usersByPhone.get(invitation.phone);
+        const registered =
+          invitation.usedAt !== null || user?.role === 'PROVIDER';
+        return {
+          id: invitation.id,
+          phone: invitation.phone,
+          name: invitation.candidateName ?? user?.name ?? null,
+          specialty: invitation.specialty,
+          invitedAt: invitation.createdAt,
+          smsSentAt: invitation.smsSentAt,
+          expiresAt: invitation.expiresAt,
+          registeredAt:
+            invitation.usedAt ??
+            (user?.role === 'PROVIDER' ? user.createdAt : null),
+          verificationStatus: user?.providerProfile?.verificationStatus ?? null,
+          status: registered ? 'REGISTERED' : 'INVITED',
+          canRemind: !registered,
+        };
+      }),
+      total: latestInvitations.length,
+    };
+  }
+
+  @ApiOperation({ summary: 'Remind a provider who has not registered yet' })
+  @Post('invitations/:invitationId/remind')
+  remindInvitation(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return this.providerOnboardingService.remindInvitation(
+      invitationId,
+      currentUser.userId,
+    );
+  }
+
+  @ApiOperation({ summary: 'Remind multiple providers who have not registered' })
+  @Post('invitations/remind-batch')
+  remindInvitations(
+    @CurrentUser() currentUser: TokenPayload,
+    @Body() dto: RemindProviderInvitationBatchDto,
+  ) {
+    return this.providerOnboardingService.remindInvitations(
+      dto.invitationIds,
       currentUser.userId,
     );
   }
