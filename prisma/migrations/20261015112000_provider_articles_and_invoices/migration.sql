@@ -9,6 +9,7 @@ CREATE TABLE "ProviderArticle" (
     "excerpt" VARCHAR(320) NOT NULL,
     "content" JSONB NOT NULL,
     "coverImage" TEXT,
+    "coverPublicId" TEXT,
     "coverAlt" TEXT,
     "readingMinutes" INTEGER NOT NULL DEFAULT 1,
     "status" "ProviderArticleStatus" NOT NULL DEFAULT 'PENDING_REVIEW',

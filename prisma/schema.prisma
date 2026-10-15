@@ -215,6 +215,7 @@ model ProviderArticle {
   excerpt           String               @db.VarChar(320)
   content           Json
   coverImage        String?
+  coverPublicId     String?
   coverAlt          String?
   readingMinutes    Int                  @default(1)
   status            ProviderArticleStatus @default(PENDING_REVIEW)

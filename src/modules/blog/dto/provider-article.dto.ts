@@ -37,9 +37,10 @@ export class SubmitProviderArticleDto {
   @Type(() => BlogContentBlockDto)
   content!: BlogContentBlockDto[];
 
+  @IsOptional()
   @IsString()
   @MaxLength(2048)
-  coverImage!: string;
+  coverImage?: string | null;
 
   @IsOptional()
   @IsString()
@@ -65,6 +66,13 @@ export class SubmitProviderArticleDto {
   @Min(1)
   @Max(120)
   readingMinutes?: number;
+}
+
+export class UploadProviderArticleCoverDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  coverAlt?: string;
 }
 
 export class RateProviderArticleDto {

@@ -9,12 +9,15 @@ import {
 import type { Prisma } from '../../../generated/prisma/client';
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PRISMA_SERVICE } from '../../infrastructure/database/prisma.service.token';
+import { IMAGE_UPLOADER } from '../../shared/storage/image-uploader.token';
+import type { ImageUploader } from '../../shared/storage/image-uploader.port';
 import type {
   AdminProviderArticleListQueryDto,
   ProviderArticleListQueryDto,
   RateProviderArticleDto,
   ReviewProviderArticleDto,
   SubmitProviderArticleDto,
+  UploadProviderArticleCoverDto,
 } from './dto/provider-article.dto';
 
 const ARTICLE_FIELDS = {
@@ -88,6 +91,31 @@ const PUBLIC_ARTICLE_FIELDS = {
   },
 } satisfies Prisma.ProviderArticleSelect;
 
+const MY_ARTICLE_FIELDS = {
+  id: true,
+  slug: true,
+  title: true,
+  excerpt: true,
+  coverImage: true,
+  coverAlt: true,
+  status: true,
+  reviewNote: true,
+  reviewedAt: true,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  categories: {
+    select: {
+      specialtyGroup: { select: { id: true, name: true, slug: true } },
+    },
+  },
+  specialties: {
+    select: {
+      specialty: { select: { id: true, name: true, slug: true } },
+    },
+  },
+} satisfies Prisma.ProviderArticleSelect;
+
 function prismaCode(error: unknown): string | undefined {
   return (error as { code?: string })?.code;
 }
@@ -113,7 +141,10 @@ function containsContactInformation(value: string) {
 
 @Injectable()
 export class ProviderArticlesService {
-  constructor(@Inject(PRISMA_SERVICE) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PRISMA_SERVICE) private readonly prisma: PrismaService,
+    @Inject(IMAGE_UPLOADER) private readonly imageUploader: ImageUploader,
+  ) {}
 
   async submit(userId: string, input: SubmitProviderArticleDto) {
     const profile = await this.prisma.providerProfile.findUnique({
@@ -135,6 +166,7 @@ export class ProviderArticlesService {
           excerpt: input.excerpt.trim(),
           content: input.content as unknown as Prisma.InputJsonValue,
           coverImage: input.coverImage?.trim() || null,
+          coverPublicId: null,
           coverAlt: input.coverAlt?.trim() || null,
           readingMinutes:
             input.readingMinutes ??
@@ -161,6 +193,105 @@ export class ProviderArticlesService {
     }
   }
 
+  async uploadCover(
+    userId: string,
+    articleId: string,
+    file: Express.Multer.File,
+    input: UploadProviderArticleCoverDto,
+  ) {
+    const profile = await this.prisma.providerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) {
+      throw new ForbiddenException('بارگذاری کاور فقط برای متخصص مجاز است');
+    }
+    const article = await this.prisma.providerArticle.findFirst({
+      where: {
+        id: articleId,
+        providerProfileId: profile.id,
+        status: 'PENDING_REVIEW',
+      },
+      select: { id: true, coverPublicId: true },
+    });
+    if (!article) {
+      const exists = await this.prisma.providerArticle.findUnique({
+        where: { id: articleId },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException('مقاله پیدا نشد');
+      throw new ForbiddenException(
+        'فقط مالک مقاله‌ای که در انتظار بررسی است می‌تواند کاور بارگذاری کند',
+      );
+    }
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('فایل کاور معتبر نیست');
+    }
+    if (!/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
+      throw new BadRequestException(
+        'فقط تصویر JPEG، PNG یا WebP پذیرفته می‌شود',
+      );
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('حداکثر حجم تصویر کاور ۵ مگابایت است');
+    }
+    if (input.coverAlt && containsContactInformation(input.coverAlt)) {
+      throw new BadRequestException(
+        'ثبت شماره تماس یا ایمیل در توضیح تصویر مجاز نیست',
+      );
+    }
+
+    const uploaded = await this.imageUploader.upload(
+      file.buffer,
+      'provider-article-covers',
+    );
+    let updated: {
+      id: string;
+      coverImage: string | null;
+      coverAlt: string | null;
+      status: string;
+      updatedAt: Date;
+    };
+    try {
+      const result = await this.prisma.providerArticle.updateMany({
+        where: {
+          id: article.id,
+          providerProfileId: profile.id,
+          status: 'PENDING_REVIEW',
+        },
+        data: {
+          coverImage: uploaded.url,
+          coverPublicId: uploaded.publicId,
+          ...(input.coverAlt !== undefined
+            ? { coverAlt: input.coverAlt.trim() || null }
+            : {}),
+        },
+      });
+      if (!result.count) {
+        throw new ConflictException('مقاله هم‌زمان تغییر کرده است');
+      }
+      updated = await this.prisma.providerArticle.findUniqueOrThrow({
+        where: { id: article.id },
+        select: {
+          id: true,
+          coverImage: true,
+          coverAlt: true,
+          status: true,
+          updatedAt: true,
+        },
+      });
+    } catch (error) {
+      await this.imageUploader.delete(uploaded.publicId).catch(() => undefined);
+      throw error;
+    }
+    if (article.coverPublicId) {
+      await this.imageUploader
+        .delete(article.coverPublicId)
+        .catch(() => undefined);
+    }
+    return updated;
+  }
+
   async listMine(userId: string) {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { userId },
@@ -171,10 +302,16 @@ export class ProviderArticlesService {
     }
     const items = await this.prisma.providerArticle.findMany({
       where: { providerProfileId: profile.id },
-      select: ARTICLE_FIELDS,
+      select: MY_ARTICLE_FIELDS,
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     });
-    return { items };
+    return {
+      items: items.map((item) => ({
+        ...item,
+        categories: item.categories.map((link) => link.specialtyGroup),
+        specialties: item.specialties.map((link) => link.specialty),
+      })),
+    };
   }
 
   async listPublic(query: ProviderArticleListQueryDto) {
@@ -309,8 +446,27 @@ export class ProviderArticlesService {
     if (input.decision === 'REJECT' && !input.reviewNote?.trim()) {
       throw new BadRequestException('برای رد مقاله باید دلیل ثبت شود');
     }
+    if (input.decision === 'APPROVE') {
+      const article = await this.prisma.providerArticle.findUnique({
+        where: { id },
+        select: { id: true, status: true, coverImage: true },
+      });
+      if (!article) throw new NotFoundException('مقاله پیدا نشد');
+      if (article.status !== 'PENDING_REVIEW') {
+        throw new ConflictException('این مقاله در انتظار بررسی نیست');
+      }
+      if (!article.coverImage) {
+        throw new BadRequestException(
+          'پیش از تأیید، متخصص باید تصویر کاور مقاله را بارگذاری کند',
+        );
+      }
+    }
     const result = await this.prisma.providerArticle.updateMany({
-      where: { id, status: 'PENDING_REVIEW' },
+      where: {
+        id,
+        status: 'PENDING_REVIEW',
+        ...(input.decision === 'APPROVE' ? { coverImage: { not: null } } : {}),
+      },
       data: {
         status: input.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED',
         reviewNote: input.reviewNote?.trim() || null,
@@ -398,17 +554,16 @@ export class ProviderArticlesService {
         throw new BadRequestException('بلوک متنی مقاله نمی‌تواند خالی باشد');
       }
     }
-    if (!input.coverImage.trim()) {
-      throw new BadRequestException('تصویر کاور مقاله الزامی است');
-    }
-    let coverImage: URL;
-    try {
-      coverImage = new URL(input.coverImage);
-    } catch {
-      throw new BadRequestException('نشانی تصویر کاور معتبر نیست');
-    }
-    if (coverImage.protocol !== 'https:') {
-      throw new BadRequestException('نشانی تصویر کاور باید HTTPS باشد');
+    if (input.coverImage) {
+      let coverImage: URL;
+      try {
+        coverImage = new URL(input.coverImage);
+      } catch {
+        throw new BadRequestException('نشانی تصویر کاور معتبر نیست');
+      }
+      if (coverImage.protocol !== 'https:') {
+        throw new BadRequestException('نشانی تصویر کاور باید HTTPS باشد');
+      }
     }
   }
 

@@ -2,15 +2,27 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  FileTypeValidator,
   Get,
+  MaxFileSizeValidator,
   Param,
+  ParseFilePipe,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../auth/presentation/decorators/current-user.decorator';
 import { AdminGuard } from '../auth/presentation/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/presentation/guards/jwt-auth.guard';
@@ -21,6 +33,7 @@ import {
   RateProviderArticleDto,
   ReviewProviderArticleDto,
   SubmitProviderArticleDto,
+  UploadProviderArticleCoverDto,
 } from './dto/provider-article.dto';
 import { ProviderArticlesService } from './provider-articles.service';
 
@@ -83,6 +96,46 @@ export class ProviderArticlesController {
       throw new ForbiddenException('فقط متخصص می‌تواند مقاله‌های خود را ببیند');
     }
     return this.articles.listMine(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Upload or replace the cover of my pending article',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        coverAlt: { type: 'string', maxLength: 200 },
+      },
+    },
+  })
+  @Post(':id/cover')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  uploadCover(
+    @CurrentUser() user: TokenPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UploadProviderArticleCoverDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({
+            fileType: /^image\/(jpeg|png|webp)$/,
+          }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    if (user.role !== 'PROVIDER') {
+      throw new ForbiddenException('بارگذاری کاور فقط برای متخصص مجاز است');
+    }
+    return this.articles.uploadCover(user.userId, id, file, dto);
   }
 }
 
