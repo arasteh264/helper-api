@@ -2,7 +2,6 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-profile.repository.token';
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 
-
 @Injectable()
 export class RemoveSkillFromProviderUseCase {
   constructor(

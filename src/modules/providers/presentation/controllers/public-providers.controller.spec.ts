@@ -16,8 +16,7 @@ describe('PublicProvidersController public provider queries', () => {
     await controller.list(undefined, undefined, '1', '16');
 
     const args = findMany.mock.calls[0][0];
-    const specialtySelect =
-      args.include.specialties.include.specialty.select;
+    const specialtySelect = args.include.specialties.include.specialty.select;
     expect(specialtySelect).toMatchObject({
       id: true,
       name: true,

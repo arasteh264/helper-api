@@ -35,6 +35,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   private readonly verificationCooldownMs = 15_000;
   private autoConfirmationTimer?: NodeJS.Timeout;
   private pendingVerificationSweepRunning = false;
+  private pendingVerificationConfigWarningLogged = false;
 
   constructor(
     @Inject(PRISMA_SERVICE) private readonly prisma: PrismaService,
@@ -99,6 +100,20 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
   async processPendingGatewayVerifications() {
     if (this.pendingVerificationSweepRunning) return;
+    if (
+      !process.env.ZARINPAL_MERCHANT_ID ||
+      !process.env.ZARINPAL_CALLBACK_URL
+    ) {
+      if (!this.pendingVerificationConfigWarningLogged) {
+        this.logger.warn(
+          'Skipping pending gateway verification: Zarinpal configuration is incomplete',
+        );
+        this.pendingVerificationConfigWarningLogged = true;
+      }
+      return;
+    }
+    this.pendingVerificationConfigWarningLogged = false;
+
     this.pendingVerificationSweepRunning = true;
     const retryBefore = new Date(Date.now() - this.verificationCooldownMs);
     const olderThan = new Date(Date.now() - 60_000);
@@ -1132,7 +1147,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
             ? 'اختلاف به نفع provider تعیین‌تکلیف و درآمد تسویه شد'
             : customerConfirmedDispute
               ? 'مشتری اختلاف را پس گرفت و انجام کار را تأیید کرد'
-            : 'اتمام کار تأیید و درآمد provider تسویه شد',
+              : 'اتمام کار تأیید و درآمد provider تسویه شد',
         releasedAmountToman: request.providerPriceToman - commission,
         providerUserId: request.acceptedProviderProfile.userId,
         customerId: request.customerId,
@@ -1150,14 +1165,14 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
             ? 'اختلاف به نفع شما تعیین‌تکلیف شد'
             : customerConfirmedDispute
               ? 'مشتری اختلاف را پس گرفت و کار را تأیید کرد'
-            : 'پایان کار تأیید شد',
+              : 'پایان کار تأیید شد',
         body: autoConfirmed
           ? `مهلت پاسخ مشتری برای درخواست «${completion.requestTitle}» به پایان رسید و درآمد آزاد شد.`
           : adminResolvedDispute
             ? `پس از بررسی اختلاف درخواست «${completion.requestTitle}»، درآمد برای شما آزاد شد.`
             : customerConfirmedDispute
               ? `مشتری اختلاف درخواست «${completion.requestTitle}» را پس گرفت و انجام کار را تأیید کرد؛ درآمد برای شما آزاد شد.`
-            : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
+              : `مشتری پایان درخواست «${completion.requestTitle}» را تأیید کرد.`,
         serviceRequestId: requestId,
       }),
       this.notifications.createForUser({
@@ -1202,7 +1217,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       resolution: 'PROVIDER',
       resolvedByUserId: userId,
       actor: 'CUSTOMER',
-      reason: 'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
+      reason:
+        'مشتری پس از ثبت اختلاف، با انجام کار موافقت و اختلاف را پس گرفت.',
     });
   }
 
@@ -1213,9 +1229,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     description: string,
   ) {
     if (reason === 'CUSTOMER_NON_PAYMENT') {
-      throw new BadRequestException(
-        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
-      );
+      throw new BadRequestException('این نوع اختلاف فقط توسط متخصص ثبت می‌شود');
     }
     const now = new Date();
     const request = await this.prisma.serviceRequest.findFirst({
@@ -1277,9 +1291,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     description: string,
   ) {
     if (reason === 'CUSTOMER_NON_PAYMENT') {
-      throw new BadRequestException(
-        'این نوع اختلاف فقط توسط متخصص ثبت می‌شود',
-      );
+      throw new BadRequestException('این نوع اختلاف فقط توسط متخصص ثبت می‌شود');
     }
     const result = await this.prisma.serviceRequest.updateMany({
       where: {
@@ -1305,10 +1317,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: requestId,
         status: 'DISPUTED',
-        OR: [
-          { customerId: userId },
-          { acceptedProviderProfile: { userId } },
-        ],
+        OR: [{ customerId: userId }, { acceptedProviderProfile: { userId } }],
       },
       select: {
         id: true,
@@ -1366,7 +1375,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
-  async addAdminDisputeMessage(requestId: string, adminUserId: string, body: string) {
+  async addAdminDisputeMessage(
+    requestId: string,
+    adminUserId: string,
+    body: string,
+  ) {
     const request = await this.prisma.serviceRequest.findFirst({
       where: { id: requestId, status: 'DISPUTED' },
       select: {
@@ -1441,10 +1454,14 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         disputeDescription: true,
         disputeUpdatedAt: true,
         createdAt: true,
-        customer: { select: { id: true, name: true, phone: true, email: true } },
+        customer: {
+          select: { id: true, name: true, phone: true, email: true },
+        },
         acceptedProviderProfile: {
           select: {
-            user: { select: { id: true, name: true, phone: true, email: true } },
+            user: {
+              select: { id: true, name: true, phone: true, email: true },
+            },
           },
         },
         payments: {

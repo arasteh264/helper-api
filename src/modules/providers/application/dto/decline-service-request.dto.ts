@@ -18,8 +18,7 @@ export const PROVIDER_DECLINE_REASONS = [
   'OTHER',
 ] as const;
 
-export type ProviderDeclineReason =
-  (typeof PROVIDER_DECLINE_REASONS)[number];
+export type ProviderDeclineReason = (typeof PROVIDER_DECLINE_REASONS)[number];
 
 export class DeclineServiceRequestDto {
   @ApiProperty({ enum: PROVIDER_DECLINE_REASONS })

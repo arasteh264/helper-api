@@ -75,24 +75,25 @@ export function toCustomerView(request: CustomerViewSource) {
     customerConfirmationDeadline:
       request.customerConfirmationDeadline?.toISOString(),
     status,
-    dispute: request.disputeReason || request.status === 'DISPUTED'
-      ? {
-          reason: request.disputeReason ?? null,
-          description: request.disputeDescription ?? null,
-          updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
-          resolved: Boolean(request.disputeResolvedAt),
-          resolution: request.disputeResolution ?? null,
-          resolutionNote: request.disputeResolutionNote ?? null,
-          messages: (request.disputeMessages ?? []).map((message) => ({
-            id: message.id,
-            body: message.body,
-            createdAt: message.createdAt.toISOString(),
-            authorId: message.author.id,
-            authorName: message.author.name,
-            authorRole: message.author.role,
-          })),
-        }
-      : null,
+    dispute:
+      request.disputeReason || request.status === 'DISPUTED'
+        ? {
+            reason: request.disputeReason ?? null,
+            description: request.disputeDescription ?? null,
+            updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
+            resolved: Boolean(request.disputeResolvedAt),
+            resolution: request.disputeResolution ?? null,
+            resolutionNote: request.disputeResolutionNote ?? null,
+            messages: (request.disputeMessages ?? []).map((message) => ({
+              id: message.id,
+              body: message.body,
+              createdAt: message.createdAt.toISOString(),
+              authorId: message.author.id,
+              authorName: message.author.name,
+              authorRole: message.author.role,
+            })),
+          }
+        : null,
     offersCount: provider ? 1 : 0,
     budget:
       request.budgetMin !== null && request.budgetMax !== null

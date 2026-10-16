@@ -23,7 +23,9 @@ export class ProviderJobsController {
     return this.providerJobsUseCase.list(user.userId);
   }
 
-  @ApiOperation({ summary: 'Submit or update a price quote for a service request' })
+  @ApiOperation({
+    summary: 'Submit or update a price quote for a service request',
+  })
   @Post(':requestId/quote')
   quote(
     @CurrentUser() user: TokenPayload,

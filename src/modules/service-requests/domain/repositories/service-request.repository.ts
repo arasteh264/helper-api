@@ -56,7 +56,12 @@ export interface AdminServiceRequestDetails {
     createdAt: Date;
     serviceRequestCount: number;
   } | null;
-  provider: { name: string; email: string; phone: string; rating: number } | null;
+  provider: {
+    name: string;
+    email: string;
+    phone: string;
+    rating: number;
+  } | null;
   payments: {
     amountToman: number;
     gateway: string;

@@ -4,7 +4,6 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 import { IMAGE_UPLOADER } from '../../../../shared/storage/image-uploader.token';
 import type { ImageUploader } from '../../../../shared/storage/image-uploader.port';
 
-
 @Injectable()
 export class RemoveProviderAvatarUseCase {
   constructor(
@@ -21,7 +20,11 @@ export class RemoveProviderAvatarUseCase {
     const oldPublicId = profile.avatarPublicId;
 
     profile.removeAvatar();
-    await this.providerProfileRepository.update(profile);
+    await this.providerProfileRepository.updateAvatar(
+      profile.id,
+      profile.avatarUrl,
+      profile.avatarPublicId,
+    );
 
     if (oldPublicId) {
       await this.imageUploader.delete(oldPublicId).catch(() => undefined);

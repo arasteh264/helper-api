@@ -7,7 +7,9 @@ import { Logger } from '@nestjs/common';
 export class ProviderStoriesScheduler {
   private readonly logger = new Logger(ProviderStoriesScheduler.name);
 
-  constructor(private readonly adminStoriesService: AdminProviderStoriesService) {}
+  constructor(
+    private readonly adminStoriesService: AdminProviderStoriesService,
+  ) {}
 
   @Cron('*/10 * * * *')
   async handleStoryExpiry() {

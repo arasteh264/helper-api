@@ -1,11 +1,7 @@
 export function normalizeSheba(sheba: string): string {
   const compact = sheba
-    .replace(/[۰-۹]/g, (digit) =>
-      String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)),
-    )
-    .replace(/[٠-٩]/g, (digit) =>
-      String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)),
-    )
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
     .replace(/\s+/g, '')
     .toUpperCase();
 

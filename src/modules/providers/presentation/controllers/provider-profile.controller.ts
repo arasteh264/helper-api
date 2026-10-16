@@ -335,7 +335,7 @@ export class ProviderProfileController {
   ) {
     return this.uploadProviderDocumentUseCase.execute(
       currentUser.userId,
-      dto.type as any,
+      dto.type,
       file.buffer,
     );
   }

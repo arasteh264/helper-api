@@ -215,7 +215,9 @@ export class ProviderJobsUseCase {
           request.budgetMin ??
           0,
         pricingMode:
-          request.providerPricingMode ?? request.specialty?.pricingMode ?? 'QUOTE',
+          request.providerPricingMode ??
+          request.specialty?.pricingMode ??
+          'QUOTE',
         hourlyRateToman:
           request.providerHourlyRateToman ??
           request.specialty?.hourlyRateToman ??
@@ -302,14 +304,21 @@ export class ProviderJobsUseCase {
       throw new ForbiddenException('ثبت هزینه‌ی قطعات برای این تخصص فعال نیست');
     }
     for (const item of items) {
-      if (item.supplyMode === QuoteItemSupplyMode.CUSTOMER && item.amountToman !== 0) {
-        throw new BadRequestException('برای اقلامی که مشتری تهیه می‌کند مبلغ وارد نکنید');
+      if (
+        item.supplyMode === QuoteItemSupplyMode.CUSTOMER &&
+        item.amountToman !== 0
+      ) {
+        throw new BadRequestException(
+          'برای اقلامی که مشتری تهیه می‌کند مبلغ وارد نکنید',
+        );
       }
       if (
         item.supplyMode === QuoteItemSupplyMode.PROVIDER_SEPARATE &&
         item.amountToman <= 0
       ) {
-        throw new BadRequestException('هزینه‌ی اقلام جداگانه باید بیشتر از صفر باشد');
+        throw new BadRequestException(
+          'هزینه‌ی اقلام جداگانه باید بیشتر از صفر باشد',
+        );
       }
     }
 
@@ -666,7 +675,11 @@ export class ProviderJobsUseCase {
     return message;
   }
 
-  async raiseNonPaymentDispute(userId: string, requestId: string, description: string) {
+  async raiseNonPaymentDispute(
+    userId: string,
+    requestId: string,
+    description: string,
+  ) {
     const profile = await this.getApprovedProfile(userId);
     const result = await this.prisma.serviceRequest.updateMany({
       where: {

@@ -4,7 +4,6 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 import { IMAGE_UPLOADER } from '../../../../shared/storage/image-uploader.token';
 import type { ImageUploader } from '../../../../shared/storage/image-uploader.port';
 
-
 @Injectable()
 export class UploadProviderAvatarUseCase {
   constructor(
@@ -29,7 +28,11 @@ export class UploadProviderAvatarUseCase {
 
     try {
       profile.changeAvatar(url, publicId);
-      await this.providerProfileRepository.update(profile);
+      await this.providerProfileRepository.updateAvatar(
+        profile.id,
+        profile.avatarUrl,
+        profile.avatarPublicId,
+      );
     } catch (error) {
       // ذخیره توی دیتابیس شکست خورد، پس عکس تازه آپلودشده یتیم نمونه
       await this.imageUploader.delete(publicId).catch(() => undefined);

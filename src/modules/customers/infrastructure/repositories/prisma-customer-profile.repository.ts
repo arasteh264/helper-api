@@ -4,9 +4,7 @@ import { CustomerProfile } from '../../domain/entities/customer-profile.entity';
 import type { CustomerProfileRepository } from '../../domain/repositories/customer-profile.repository';
 
 @Injectable()
-export class PrismaCustomerProfileRepository
-  implements CustomerProfileRepository
-{
+export class PrismaCustomerProfileRepository implements CustomerProfileRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByUserId(userId: string): Promise<CustomerProfile | null> {

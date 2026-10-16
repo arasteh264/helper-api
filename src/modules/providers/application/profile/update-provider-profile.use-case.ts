@@ -8,7 +8,6 @@ import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 import { ProviderPrivateProfileDetailsResponseDto } from '../dto/provider-private-profile-details-response.dto';
 
-
 @Injectable()
 export class UpdateProviderProfileUseCase {
   constructor(
@@ -31,10 +30,7 @@ export class UpdateProviderProfileUseCase {
     const profile = await this.providerProfileRepository.findByUserId(userId);
     if (!profile) throw new NotFoundException('Provider profile not found');
 
-    if (
-      dto.isAvailable === true &&
-      !profile.providerAddress?.trim()
-    ) {
+    if (dto.isAvailable === true && !profile.providerAddress?.trim()) {
       throw new BadRequestException(
         'برای دریافت درخواست، ابتدا نشانی محرمانه‌ی منزل یا محل کسب را ثبت کنید',
       );

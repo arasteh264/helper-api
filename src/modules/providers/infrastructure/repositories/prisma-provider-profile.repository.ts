@@ -71,6 +71,17 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
     ]);
   }
 
+  async updateAvatar(
+    profileId: string,
+    avatarUrl: string | null,
+    avatarPublicId: string | null,
+  ): Promise<void> {
+    await this.prisma.providerProfile.update({
+      where: { id: profileId },
+      data: { avatarUrl, avatarPublicId },
+    });
+  }
+
   async findByUserId(userId: string): Promise<ProviderProfile | null> {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { userId },
@@ -253,7 +264,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
               },
             },
           }
-
         : {}),
     };
 
@@ -442,7 +452,6 @@ export class PrismaProviderProfileRepository implements ProviderProfileRepositor
         groupId: specialty.groupId,
         groupName: specialty.group.name,
       })),
-
     }));
   }
 

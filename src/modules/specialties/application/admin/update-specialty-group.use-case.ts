@@ -52,7 +52,9 @@ export class UpdateSpecialtyGroupUseCase {
 
     if (command.iconFile) {
       if (command.removeIcon) {
-        throw new ConflictException('برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است');
+        throw new ConflictException(
+          'برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است',
+        );
       }
       uploadedIcon = await this.iconStorage.uploadIcon(
         command.iconFile,

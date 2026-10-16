@@ -25,15 +25,12 @@ async function mapWithConcurrency<T, R>(
   const results = new Array<R>(values.length);
   let nextIndex = 0;
   await Promise.all(
-    Array.from(
-      { length: Math.min(concurrency, values.length) },
-      async () => {
-        while (nextIndex < values.length) {
-          const index = nextIndex++;
-          results[index] = await callback(values[index]);
-        }
-      },
-    ),
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex++;
+        results[index] = await callback(values[index]);
+      }
+    }),
   );
   return results;
 }
@@ -50,7 +47,9 @@ function normalizePhone(value: string): string {
   else if (/^9\d{9}$/.test(phone)) phone = `0${phone}`;
 
   if (!/^09\d{9}$/.test(phone)) {
-    throw new BadRequestException('شماره موبایل باید معتبر و متعلق به ایران باشد');
+    throw new BadRequestException(
+      'شماره موبایل باید معتبر و متعلق به ایران باشد',
+    );
   }
 
   return phone;
@@ -225,11 +224,10 @@ export class ProviderOnboardingService {
         }
 
         try {
-          const invitation = await this.createInvitation(
-            item.phone,
-            adminId,
-            { name: item.name, specialty: item.specialty },
-          );
+          const invitation = await this.createInvitation(item.phone, adminId, {
+            name: item.name,
+            specialty: item.specialty,
+          });
           return { ...invitation, success: true };
         } catch (error) {
           return {
@@ -259,7 +257,12 @@ export class ProviderOnboardingService {
       async (id) => {
         try {
           const result = await this.remindInvitation(id, adminId);
-          return { id, phone: result.phone, success: true, message: result.message };
+          return {
+            id,
+            phone: result.phone,
+            success: true,
+            message: result.message,
+          };
         } catch (error) {
           return {
             id,
@@ -350,11 +353,10 @@ export class ProviderOnboardingService {
   async completeOnboarding(input: CompleteProviderOnboardingDto) {
     const normalizedEmail = input.email.trim().toLowerCase();
     const tokenHash = hashToken(input.token);
-    const invitation = await this.prisma.providerOnboardingInvitation.findUnique(
-      {
+    const invitation =
+      await this.prisma.providerOnboardingInvitation.findUnique({
         where: { tokenHash },
-      },
-    );
+      });
     if (
       !invitation ||
       invitation.usedAt ||
@@ -419,7 +421,9 @@ export class ProviderOnboardingService {
           data: { usedAt: now },
         });
         if (consumed.count !== 1) {
-          throw new NotFoundException('لینک دعوت قبلاً استفاده یا منقضی شده است');
+          throw new NotFoundException(
+            'لینک دعوت قبلاً استفاده یا منقضی شده است',
+          );
         }
 
         await tx.user.create({
@@ -483,7 +487,8 @@ export class ProviderOnboardingService {
     }
 
     return {
-      message: 'ثبت‌نام متخصص انجام شد؛ مدارک را برای بررسی ادمین بارگذاری کنید',
+      message:
+        'ثبت‌نام متخصص انجام شد؛ مدارک را برای بررسی ادمین بارگذاری کنید',
       accessToken: this.tokenGenerator.generate({
         userId,
         role: 'PROVIDER',

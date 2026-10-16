@@ -100,7 +100,9 @@ export class SmsService {
     try {
       return (await response.json()) as SmsIrResponse;
     } catch {
-      throw new Error(`SMS.ir returned an invalid response (HTTP ${response.status})`);
+      throw new Error(
+        `SMS.ir returned an invalid response (HTTP ${response.status})`,
+      );
     }
   }
 

@@ -74,7 +74,9 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
     );
   }
 
-  async findAdminDetails(id: string): Promise<AdminServiceRequestDetails | null> {
+  async findAdminDetails(
+    id: string,
+  ): Promise<AdminServiceRequestDetails | null> {
     const request = await this.prisma.serviceRequest.findUnique({
       where: { id },
       include: {
@@ -166,9 +168,15 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
             }
           : null,
       invitationCounts: {
-        pending: request.invitations.filter(({ status }) => status === 'PENDING').length,
-        accepted: request.invitations.filter(({ status }) => status === 'ACCEPTED').length,
-        declined: request.invitations.filter(({ status }) => status === 'DECLINED').length,
+        pending: request.invitations.filter(
+          ({ status }) => status === 'PENDING',
+        ).length,
+        accepted: request.invitations.filter(
+          ({ status }) => status === 'ACCEPTED',
+        ).length,
+        declined: request.invitations.filter(
+          ({ status }) => status === 'DECLINED',
+        ).length,
       },
     };
   }
@@ -345,7 +353,8 @@ export class PrismaServiceRequestRepository implements ServiceRequestRepository 
     }
 
     const and: any[] = [];
-    if (f.budgetFrom !== undefined) and.push({ budgetMax: { gte: f.budgetFrom } });
+    if (f.budgetFrom !== undefined)
+      and.push({ budgetMax: { gte: f.budgetFrom } });
     if (f.budgetTo !== undefined) and.push({ budgetMin: { lte: f.budgetTo } });
     if (and.length) where.AND = and;
 

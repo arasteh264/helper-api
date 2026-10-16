@@ -52,6 +52,11 @@ export interface AdminProviderInsights {
 export interface ProviderProfileRepository {
   save(profile: ProviderProfile): Promise<void>;
   update(profile: ProviderProfile): Promise<void>;
+  updateAvatar(
+    profileId: string,
+    avatarUrl: string | null,
+    avatarPublicId: string | null,
+  ): Promise<void>;
 
   findByUserId(userId: string): Promise<ProviderProfile | null>;
   findById(id: string): Promise<ProviderProfile | null>;

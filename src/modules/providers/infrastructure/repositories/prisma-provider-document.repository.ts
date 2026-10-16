@@ -34,7 +34,7 @@ export class PrismaProviderDocumentRepository implements ProviderDocumentReposit
         status: 'PENDING',
         rejectionNote: null,
       },
-    }) as unknown as ProviderDocumentRecord;
+    });
   }
 
   async findByProviderProfileId(
@@ -43,13 +43,13 @@ export class PrismaProviderDocumentRepository implements ProviderDocumentReposit
     return this.prisma.providerDocument.findMany({
       where: { providerProfileId },
       orderBy: { createdAt: 'asc' },
-    }) as unknown as ProviderDocumentRecord[];
+    });
   }
 
   async findById(id: string): Promise<ProviderDocumentRecord | null> {
     return this.prisma.providerDocument.findUnique({
       where: { id },
-    }) as unknown as Promise<ProviderDocumentRecord | null>;
+    });
   }
 
   async updateStatus(
@@ -60,6 +60,6 @@ export class PrismaProviderDocumentRepository implements ProviderDocumentReposit
     return this.prisma.providerDocument.update({
       where: { id },
       data: { status: status as any, rejectionNote: rejectionNote ?? null },
-    }) as unknown as ProviderDocumentRecord;
+    });
   }
 }

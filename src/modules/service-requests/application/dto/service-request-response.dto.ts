@@ -49,7 +49,9 @@ export class ServiceRequestResponseDto {
     dto.skillIds = request.skillIds;
     dto.specialtyId = request.specialtyId;
     dto.customer = customer;
-    dto.specialty = request.specialtyName ? { name: request.specialtyName } : null;
+    dto.specialty = request.specialtyName
+      ? { name: request.specialtyName }
+      : null;
     dto.skills = skills;
     dto.address = request.address;
     dto.preferredTime = request.preferredTime;

@@ -42,7 +42,7 @@ function createFixture() {
   const service = new NotificationsService(
     prisma as unknown as PrismaService,
     smsService as never,
-    emailSender as never,
+    emailSender,
   );
   return { prisma, service, smsService, emailSender };
 }

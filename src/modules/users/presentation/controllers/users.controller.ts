@@ -302,7 +302,8 @@ export class UsersController {
   }
 
   @ApiOperation({
-    summary: 'Delete a customer or provider account with no service or financial history',
+    summary:
+      'Delete a customer or provider account with no service or financial history',
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, AdminGuard)
@@ -404,7 +405,8 @@ export class UsersController {
       return {
         id,
         message: 'حساب کاربر حذف شد.',
-        cleanupWarning: 'حساب حذف شد، اما حذف بعضی تصاویر ذخیره‌شده ناموفق بود.',
+        cleanupWarning:
+          'حساب حذف شد، اما حذف بعضی تصاویر ذخیره‌شده ناموفق بود.',
       };
     }
 

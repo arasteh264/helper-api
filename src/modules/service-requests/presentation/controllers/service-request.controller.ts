@@ -118,7 +118,9 @@ export class ServiceRequestController {
     });
   }
 
-  @ApiOperation({ summary: 'List provider quotes for a customer service request' })
+  @ApiOperation({
+    summary: 'List provider quotes for a customer service request',
+  })
   @Get(':id/offers')
   async getOffers(
     @CurrentUser() currentUser: TokenPayload,
@@ -210,7 +212,9 @@ export class ServiceRequestController {
         },
       });
       if (!updated.count) {
-        throw new ConflictException('درخواست هم‌زمان توسط دیگری تغییر کرده است');
+        throw new ConflictException(
+          'درخواست هم‌زمان توسط دیگری تغییر کرده است',
+        );
       }
 
       await tx.providerRequestInvitation.updateMany({
@@ -715,24 +719,25 @@ export class ServiceRequestController {
       customerConfirmationDeadline:
         request.customerConfirmationDeadline?.toISOString(),
       status,
-      dispute: request.disputeReason || request.status === 'DISPUTED'
-        ? {
-            reason: request.disputeReason,
-            description: request.disputeDescription,
-            updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
-            resolved: Boolean(request.disputeResolvedAt),
-            resolution: request.disputeResolution,
-            resolutionNote: request.disputeResolutionNote,
-            messages: request.disputeMessages.map((message) => ({
-              id: message.id,
-              body: message.body,
-              createdAt: message.createdAt.toISOString(),
-              authorId: message.author.id,
-              authorName: message.author.name,
-              authorRole: message.author.role,
-            })),
-          }
-        : null,
+      dispute:
+        request.disputeReason || request.status === 'DISPUTED'
+          ? {
+              reason: request.disputeReason,
+              description: request.disputeDescription,
+              updatedAt: request.disputeUpdatedAt?.toISOString() ?? null,
+              resolved: Boolean(request.disputeResolvedAt),
+              resolution: request.disputeResolution,
+              resolutionNote: request.disputeResolutionNote,
+              messages: request.disputeMessages.map((message) => ({
+                id: message.id,
+                body: message.body,
+                createdAt: message.createdAt.toISOString(),
+                authorId: message.author.id,
+                authorName: message.author.name,
+                authorRole: message.author.role,
+              })),
+            }
+          : null,
       offersCount: provider ? 1 : 0,
       budget:
         request.budgetMin !== null && request.budgetMax !== null

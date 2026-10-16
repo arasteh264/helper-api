@@ -21,13 +21,19 @@ describe('provider profile address visibility', () => {
     providerAddressType: 'HOME',
     createdAt: new Date(),
     updatedAt: new Date(),
-    user: { name: 'Provider', email: 'provider@example.com', phone: '09120000000' },
+    user: {
+      name: 'Provider',
+      email: 'provider@example.com',
+      phone: '09120000000',
+    },
     skills: [],
     specialties: [],
   } satisfies ProviderProfileDetails;
 
   it('returns the address in private profile responses only', () => {
-    expect(ProviderPrivateProfileDetailsResponseDto.from(details)).toMatchObject({
+    expect(
+      ProviderPrivateProfileDetailsResponseDto.from(details),
+    ).toMatchObject({
       providerAddress: 'نشانی خصوصی متخصص',
       providerAddressType: 'HOME',
     });

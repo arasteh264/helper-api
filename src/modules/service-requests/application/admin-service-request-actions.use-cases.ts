@@ -22,7 +22,8 @@ export class AdminServiceRequestActionsUseCases {
   }
 
   async cancelIncomplete(id: string) {
-    const cancelled = await this.repository.cancelOpenRequestWithoutPayments(id);
+    const cancelled =
+      await this.repository.cancelOpenRequestWithoutPayments(id);
     if (cancelled) return { status: 'CANCELLED' as const };
 
     const details = await this.repository.findAdminDetails(id);

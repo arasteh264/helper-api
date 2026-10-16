@@ -21,9 +21,7 @@ export function rankCandidates(
         c.longitude,
       ),
     }))
-    .filter(
-      (c) => c.distanceKm <= c.serviceAreaRadiusKm,
-    )
+    .filter((c) => c.distanceKm <= c.serviceAreaRadiusKm)
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, options.batchSize)
     .map(({ providerProfileId, distanceKm }) => ({

@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { randomInt } from 'crypto';
 import type { UserRepository } from '../../users/domain/repositories/user.repository';
 import { USER_REPOSITORY } from '../../users/domain/repositories/user.repository.token';

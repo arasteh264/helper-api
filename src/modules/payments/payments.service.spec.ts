@@ -1,4 +1,5 @@
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
+import { Logger } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 function setPaymentConfig() {
@@ -7,6 +8,14 @@ function setPaymentConfig() {
     'https://api.example.test/payments/zarinpal/callback';
   process.env.ZARINPAL_SANDBOX = 'true';
   process.env.PAYMENT_RETURN_URL = 'https://site.example.test/payment/result';
+}
+
+function restoreEnvironmentVariable(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
 }
 
 describe('PaymentsService', () => {
@@ -19,10 +28,19 @@ describe('PaymentsService', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-    process.env.ZARINPAL_MERCHANT_ID = originalEnvironment.merchantId;
-    process.env.ZARINPAL_CALLBACK_URL = originalEnvironment.callbackUrl;
-    process.env.ZARINPAL_SANDBOX = originalEnvironment.sandbox;
-    process.env.PAYMENT_RETURN_URL = originalEnvironment.returnUrl;
+    restoreEnvironmentVariable(
+      'ZARINPAL_MERCHANT_ID',
+      originalEnvironment.merchantId,
+    );
+    restoreEnvironmentVariable(
+      'ZARINPAL_CALLBACK_URL',
+      originalEnvironment.callbackUrl,
+    );
+    restoreEnvironmentVariable('ZARINPAL_SANDBOX', originalEnvironment.sandbox);
+    restoreEnvironmentVariable(
+      'PAYMENT_RETURN_URL',
+      originalEnvironment.returnUrl,
+    );
   });
 
   it('creates a sandbox checkout using rial conversion and the fixed quote', async () => {
@@ -287,6 +305,31 @@ describe('PaymentsService', () => {
       }),
     );
     expect(confirm).toHaveBeenCalledWith('customer-1', 'request-expired', true);
+  });
+
+  it('skips pending gateway verification when Zarinpal is not configured', async () => {
+    delete process.env.ZARINPAL_MERCHANT_ID;
+    delete process.env.ZARINPAL_CALLBACK_URL;
+
+    const prisma = {
+      payment: { findMany: jest.fn() },
+      customerWalletTopup: { findMany: jest.fn() },
+    };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      { createForUser: jest.fn() } as never,
+    );
+    const warning = jest.spyOn(Logger.prototype, 'warn');
+
+    await service.processPendingGatewayVerifications();
+    await service.processPendingGatewayVerifications();
+
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
+    expect(prisma.customerWalletTopup.findMany).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith(
+      'Skipping pending gateway verification: Zarinpal configuration is incomplete',
+    );
   });
 
   it('retries Zarinpal verification only for a pending payment owned by the customer', async () => {

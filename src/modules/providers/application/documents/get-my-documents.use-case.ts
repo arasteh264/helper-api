@@ -4,7 +4,6 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 import { PROVIDER_DOCUMENT_REPOSITORY } from './provider-document.repository.token';
 import type { ProviderDocumentRepository } from './provider-document.repository';
 
-
 @Injectable()
 export class GetMyDocumentsUseCase {
   constructor(

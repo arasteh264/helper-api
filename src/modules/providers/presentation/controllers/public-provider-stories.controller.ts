@@ -23,9 +23,10 @@ export class PublicProviderStoriesController {
   @Post(':storyId/view')
   async recordView(@Param('storyId') storyId: string, @Req() req: Request) {
     const forwarded = req.headers['x-forwarded-for'];
-    const ip = typeof forwarded === 'string'
-      ? forwarded.split(',')[0].trim()
-      : req.ip || 'unknown';
+    const ip =
+      typeof forwarded === 'string'
+        ? forwarded.split(',')[0].trim()
+        : req.ip || 'unknown';
     const secret = process.env.STORY_VIEW_HASH_SECRET || process.env.JWT_SECRET;
     const ipAddress = secret
       ? createHmac('sha256', secret).update(ip).digest('hex')

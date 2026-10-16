@@ -43,13 +43,15 @@ describe('ProviderOnboardingService', () => {
     };
     const passwordHasher = { hash: jest.fn(), compare: jest.fn() };
     const tokenGenerator = { generate: jest.fn() };
-    const smsService = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+    const smsService = {
+      sendNotification: jest.fn().mockResolvedValue(undefined),
+    };
 
     return {
       service: new ProviderOnboardingService(
         prisma as unknown as PrismaService,
-        passwordHasher as PasswordHasher,
-        tokenGenerator as TokenGenerator,
+        passwordHasher,
+        tokenGenerator,
         smsService as unknown as SmsService,
       ),
       prisma,
@@ -64,11 +66,10 @@ describe('ProviderOnboardingService', () => {
       'https://customer.example.test/provider/onboarding';
     const { service, prisma, tx, smsService } = createService();
 
-    await service.createInvitation(
-      '+98 912 123 4567',
-      'admin-1',
-      { name: 'علی رضایی', specialty: 'تعمیر پکیج' },
-    );
+    await service.createInvitation('+98 912 123 4567', 'admin-1', {
+      name: 'علی رضایی',
+      specialty: 'تعمیر پکیج',
+    });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.providerOnboardingInvitation.create).toHaveBeenCalledWith(
@@ -84,13 +85,15 @@ describe('ProviderOnboardingService', () => {
     );
     expect(smsService.sendNotification).toHaveBeenCalledWith(
       '09121234567',
-      expect.stringContaining('https://customer.example.test/provider/onboarding?token='),
+      expect.stringContaining(
+        'https://customer.example.test/provider/onboarding?token=',
+      ),
     );
 
     const storedHash =
       tx.providerOnboardingInvitation.create.mock.calls[0][0].data.tokenHash;
     const message = smsService.sendNotification.mock.calls[0][1];
-    const token = new URL(message.split('\n').at(-1)!).searchParams.get('token');
+    const token = new URL(message.split('\n').at(-1)).searchParams.get('token');
     expect(token).toMatch(/^[a-f0-9]{64}$/);
     expect(storedHash).toBe(createHash('sha256').update(token!).digest('hex'));
     expect(storedHash).not.toBe(token);

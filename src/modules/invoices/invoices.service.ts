@@ -84,7 +84,7 @@ export class InvoicesService {
           serviceRequestId: request.id,
           customerId: request.customerId,
           providerProfileId: provider.id,
-          items: items as unknown as Prisma.InputJsonValue,
+          items: items,
           totalToman,
         },
         select: INVOICE_FIELDS,

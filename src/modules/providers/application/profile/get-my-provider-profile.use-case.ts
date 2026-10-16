@@ -3,7 +3,6 @@ import { PROVIDER_PROFILE_REPOSITORY } from '../../domain/repositories/provider-
 import type { ProviderProfileRepository } from '../../domain/repositories/provider-profile.repository';
 import { ProviderPrivateProfileDetailsResponseDto } from '../dto/provider-private-profile-details-response.dto';
 
-
 @Injectable()
 export class GetMyProviderProfileUseCase {
   constructor(

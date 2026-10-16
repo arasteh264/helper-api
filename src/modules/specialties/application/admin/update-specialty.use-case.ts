@@ -71,7 +71,9 @@ export class UpdateSpecialtyUseCase {
 
     if (command.iconFile) {
       if (command.removeIcon) {
-        throw new BadRequestException('برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است');
+        throw new BadRequestException(
+          'برای تصویر، هم‌زمان حذف و جایگزینی درخواست نشدنی است',
+        );
       }
       uploadedIcon = await this.iconStorage.uploadIcon(
         command.iconFile,

@@ -34,7 +34,11 @@ export class GetAdminProviderInsightsUseCase {
   async execute() {
     const now = new Date();
     const monthStarts: Date[] = [];
-    for (let daysBack = 0; daysBack <= 400 && monthStarts.length < 12; daysBack += 1) {
+    for (
+      let daysBack = 0;
+      daysBack <= 400 && monthStarts.length < 12;
+      daysBack += 1
+    ) {
       const candidate = new Date(
         Date.UTC(
           now.getUTCFullYear(),
@@ -68,10 +72,7 @@ export class GetAdminProviderInsightsUseCase {
       const parts = getPersianMonthParts(createdAt);
       const key = `${parts.year}-${parts.month}`;
       if (monthlyRegistrations.has(key)) {
-        monthlyRegistrations.set(
-          key,
-          (monthlyRegistrations.get(key) ?? 0) + 1,
-        );
+        monthlyRegistrations.set(key, (monthlyRegistrations.get(key) ?? 0) + 1);
       }
     }
 

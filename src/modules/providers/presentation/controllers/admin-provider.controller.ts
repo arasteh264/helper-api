@@ -59,7 +59,9 @@ export class AdminProviderController {
     private readonly prisma: PrismaService,
   ) {}
 
-  @ApiOperation({ summary: 'Invite a provider to complete registration by SMS' })
+  @ApiOperation({
+    summary: 'Invite a provider to complete registration by SMS',
+  })
   @Post('invitations')
   createInvitation(
     @CurrentUser() currentUser: TokenPayload,
@@ -87,8 +89,8 @@ export class AdminProviderController {
   @ApiOperation({ summary: 'List invited and registered providers' })
   @Get('invitations')
   async listInvitations() {
-    const invitations =
-      await this.prisma.providerOnboardingInvitation.findMany({
+    const invitations = await this.prisma.providerOnboardingInvitation.findMany(
+      {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 5000,
         select: {
@@ -102,12 +104,10 @@ export class AdminProviderController {
           usedAt: true,
           revokedAt: true,
         },
-      });
+      },
+    );
 
-    const latestByPhone = new Map<
-      string,
-      (typeof invitations)[number]
-    >();
+    const latestByPhone = new Map<string, (typeof invitations)[number]>();
     for (const invitation of invitations) {
       if (!latestByPhone.has(invitation.phone)) {
         latestByPhone.set(invitation.phone, invitation);
@@ -168,7 +168,9 @@ export class AdminProviderController {
     );
   }
 
-  @ApiOperation({ summary: 'Remind multiple providers who have not registered' })
+  @ApiOperation({
+    summary: 'Remind multiple providers who have not registered',
+  })
   @Post('invitations/remind-batch')
   remindInvitations(
     @CurrentUser() currentUser: TokenPayload,
@@ -180,13 +182,17 @@ export class AdminProviderController {
     );
   }
 
-  @ApiOperation({ summary: 'Get provider registration and performance insights' })
+  @ApiOperation({
+    summary: 'Get provider registration and performance insights',
+  })
   @Get('analytics')
   getAnalytics() {
     return this.getAdminProviderInsightsUseCase.execute();
   }
 
-  @ApiOperation({ summary: 'Get declined service request history for a provider' })
+  @ApiOperation({
+    summary: 'Get declined service request history for a provider',
+  })
   @Get(':providerId/declines')
   getDeclines(@Param('providerId') providerId: string) {
     return this.prisma.providerRequestInvitation.findMany({
@@ -260,8 +266,7 @@ export class AdminProviderController {
     }
 
     const shouldSendApprovalSms =
-      dto.status === 'APPROVED' &&
-      profile.verificationStatus !== 'APPROVED';
+      dto.status === 'APPROVED' && profile.verificationStatus !== 'APPROVED';
     profile.reviewDecision(dto.status, dto.note);
     await this.providerProfileRepository.update(profile);
 
@@ -273,8 +278,7 @@ export class AdminProviderController {
     if (shouldSendApprovalSms && details) {
       try {
         const customerAppUrl = (
-          process.env.CUSTOMER_APP_URL ??
-          'https://helper-customer.vercel.app'
+          process.env.CUSTOMER_APP_URL ?? 'https://helper-customer.vercel.app'
         ).replace(/\/+$/, '');
         await this.smsService.sendNotification(
           details.user.phone,

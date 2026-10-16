@@ -1,5 +1,7 @@
-import { ProviderDocumentRecord, REQUIRED_PROVIDER_DOCUMENT_TYPES } from "../application/documents/provider-document.repository";
-
+import {
+  ProviderDocumentRecord,
+  REQUIRED_PROVIDER_DOCUMENT_TYPES,
+} from '../application/documents/provider-document.repository';
 
 export function areRequiredDocumentsApproved(
   documents: ProviderDocumentRecord[],

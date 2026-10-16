@@ -4,7 +4,6 @@ import type { ProviderProfileRepository } from '../../domain/repositories/provid
 import { SKILL_REPOSITORY } from '../../domain/repositories/skill.repository.token';
 import type { SkillRepository } from '../../domain/repositories/skill.repository';
 
-
 @Injectable()
 export class AddSkillToProviderUseCase {
   constructor(

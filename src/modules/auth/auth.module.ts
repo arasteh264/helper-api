@@ -17,7 +17,13 @@ import { SmsIrOtpSender } from './infrastructure/services/sms-ir-otp-sender';
 import { SmsModule } from '../sms/sms.module';
 
 @Module({
-  imports: [UsersModule, TokenModule, NotificationsModule, PassportModule, SmsModule],
+  imports: [
+    UsersModule,
+    TokenModule,
+    NotificationsModule,
+    PassportModule,
+    SmsModule,
+  ],
   controllers: [AuthController, CustomerPasswordController],
   providers: [
     LoginUseCase,

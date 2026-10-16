@@ -81,7 +81,7 @@ export class CreateUserUseCase {
 
     const otpCode = generateOtpCode();
     const otpExpiresAt = new Date(Date.now() + 90 * 1000);
-    
+
     await this.prisma.pendingRegistration.upsert({
       where: { phone: input.phone },
       update: {

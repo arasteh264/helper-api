@@ -116,7 +116,8 @@ describe('SmsService', () => {
 
   it('uses the documented Code parameter for the SMS.ir sandbox template', async () => {
     process.env.SMS_IR_OTP_TEMPLATE_ID = '123456';
-    process.env.SMS_IR_OTP_PARAMETER_NAME = 'not-a-valid-template-parameter-name-value';
+    process.env.SMS_IR_OTP_PARAMETER_NAME =
+      'not-a-valid-template-parameter-name-value';
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -126,9 +127,9 @@ describe('SmsService', () => {
 
     await service.sendOtp('09121234567', '123456');
 
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).parameters).toEqual([
-      { name: 'Code', value: '123456' },
-    ]);
+    expect(
+      JSON.parse(fetchMock.mock.calls[0][1].body as string).parameters,
+    ).toEqual([{ name: 'Code', value: '123456' }]);
   });
 
   it('accepts the API key configured with its SMS.ir header name', async () => {

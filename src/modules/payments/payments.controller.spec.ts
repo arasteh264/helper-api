@@ -32,7 +32,7 @@ describe('CustomerWalletPaymentsController buyer access', () => {
   );
 
   it('does not grant buyer-wallet access to admins', () => {
-    const admin = { userId: 'admin-1', role: 'ADMIN' } as TokenPayload;
+    const admin = { userId: 'admin-1', role: 'ADMIN' };
 
     expect(() => controller.getWallet(admin)).toThrow(ForbiddenException);
     expect(() =>

@@ -11,7 +11,8 @@ export class LoggerNotificationAdapter implements NotificationPort {
     phone: string;
     distanceKm: number | null;
   }): Promise<void> {
-    const distance = input.distanceKm !== null ? `${input.distanceKm} کیلومتر` : 'نامشخص';
+    const distance =
+      input.distanceKm !== null ? `${input.distanceKm} کیلومتر` : 'نامشخص';
     this.logger.log(
       `SMS → ${input.phone}: درخواست جدیدی برای خدمات شما ثبت شده است. فاصله تقریبی: ${distance}. برای مشاهده وارد پنل Helper شوید.`,
     );
