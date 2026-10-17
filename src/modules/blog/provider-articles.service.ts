@@ -156,7 +156,7 @@ export class ProviderArticlesService {
     }
     if (!profile.canPublishArticles) {
       throw new ForbiddenException(
-        'دسترسی انتشار مقاله برای پروفایل شما هنوز توسط مدیر فعال نشده است',
+        'دسترسی انتشار مقاله برای پروفایل شما هنوز توسط پشتیبانی فعال نشده است',
       );
     }
     this.validateArticle(input);

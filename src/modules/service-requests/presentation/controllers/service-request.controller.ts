@@ -438,7 +438,7 @@ export class ServiceRequestController {
     });
     if (!original) {
       throw new ConflictException(
-        'فقط درخواستی که لغو آن توسط مدیر تأیید شده باشد قابل ثبت مجدد است',
+        'فقط درخواستی که لغو آن توسط پشتیبانی تأیید شده باشد قابل ثبت مجدد است',
       );
     }
 
@@ -490,7 +490,7 @@ export class ServiceRequestController {
       message:
         repeated.status === 'OPEN'
           ? 'درخواست مشابه دوباره برای متخصصان ارسال شد'
-          : 'درخواست مشابه برای بررسی مدیر ثبت شد',
+          : 'درخواست مشابه برای بررسی پشتیبانی ثبت شد',
     };
   }
 

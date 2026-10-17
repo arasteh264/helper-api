@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -13,7 +14,9 @@ import { JwtAuthGuard } from '../auth/presentation/guards/jwt-auth.guard';
 import type { TokenPayload } from '../auth/domain/services/token-generator.port';
 import { PaymentsService } from '../payments/payments.service';
 import { CreatePriceAdjustmentDto } from './dto/create-price-adjustment.dto';
+import { ReviewPriceAdjustmentDto } from './dto/review-price-adjustment.dto';
 import { PriceAdjustmentsService } from './price-adjustments.service';
+import { AdminGuard } from '../auth/presentation/guards/admin.guard';
 
 @ApiTags('Service price adjustments')
 @ApiBearerAuth()
@@ -64,5 +67,25 @@ export class PriceAdjustmentsController {
       user.userId,
       adjustmentId,
     );
+  }
+
+  @Get('admin/service-price-adjustments/pending')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'List service price adjustments pending support review',
+  })
+  listPendingForSupport() {
+    return this.adjustments.listPendingForSupport();
+  }
+
+  @Patch('admin/service-price-adjustments/:adjustmentId/review')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Approve or reject a service price adjustment' })
+  reviewBySupport(
+    @CurrentUser() admin: TokenPayload,
+    @Param('adjustmentId', ParseUUIDPipe) adjustmentId: string,
+    @Body() dto: ReviewPriceAdjustmentDto,
+  ) {
+    return this.adjustments.reviewBySupport(admin.userId, adjustmentId, dto);
   }
 }

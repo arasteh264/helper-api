@@ -37,7 +37,7 @@ export class UpdateProviderProfileUseCase {
       profile.verificationStatus !== 'APPROVED'
     ) {
       throw new ForbiddenException(
-        'پس از تأیید مدارک و پروفایل توسط مدیر می‌توانید آماده‌ی دریافت کار شوید',
+        'پس از تأیید مدارک و پروفایل توسط پشتیبانی می‌توانید آماده‌ی دریافت کار شوید',
       );
     }
 

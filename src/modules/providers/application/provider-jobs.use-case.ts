@@ -217,6 +217,7 @@ export class ProviderJobsUseCase {
           : undefined;
       return {
         id: request.id,
+        createdAt: request.createdAt.toISOString(),
         title: request.title,
         service:
           request.specialty?.name ??
@@ -635,11 +636,11 @@ export class ProviderJobsUseCase {
       category: 'WORK_UPDATES',
       type: 'SERVICE_REQUEST_STATUS',
       title: 'درخواست لغو کار برای بررسی ارسال شد',
-      body: `متخصص برای درخواست «${cancellation.request.title}» درخواست لغو ثبت کرده است. نتیجه پس از بررسی مدیر اطلاع داده می‌شود.`,
+      body: `متخصص برای درخواست «${cancellation.request.title}» درخواست لغو ثبت کرده است. نتیجه پس از بررسی پشتیبانی اطلاع داده می‌شود.`,
       serviceRequestId: requestId,
     });
     return {
-      message: 'درخواست لغو برای بررسی مدیر ارسال شد',
+      message: 'درخواست لغو برای بررسی پشتیبانی ارسال شد',
       cancellationRequest: cancellation.cancellation,
     };
   }
@@ -702,7 +703,7 @@ export class ProviderJobsUseCase {
         });
       if (pendingCancellation) {
         throw new ConflictException(
-          'تا زمان بررسی درخواست لغو توسط مدیر، امکان ثبت پایان کار نیست',
+          'تا زمان بررسی درخواست لغو توسط پشتیبانی، امکان ثبت پایان کار نیست',
         );
       }
       const createdReport = await tx.serviceWorkReport.create({
