@@ -55,6 +55,7 @@ import { RemoveSkillFromProviderUseCase } from '../../application/skills/remove-
 import { CreateProviderProfileUseCase } from '../../application/profile/create-provider-profile.use-case';
 import { SetProviderSpecialtiesUseCase } from '../../application/specialties/set-provider-specialties.use-case';
 import { SetProviderSpecialtiesDto } from '../../application/dto/set-provider-specialties.dto';
+import { ProviderReferralsService } from '../../application/provider-referrals.service';
 
 @ApiTags('Providers')
 @ApiBearerAuth()
@@ -78,6 +79,7 @@ export class ProviderProfileController {
     private readonly uploadProviderDocumentUseCase: UploadProviderDocumentUseCase,
     private readonly getMyDocumentsUseCase: GetMyDocumentsUseCase,
     private readonly setProviderSpecialtiesUseCase: SetProviderSpecialtiesUseCase,
+    private readonly providerReferralsService: ProviderReferralsService,
   ) {}
 
   @ApiOperation({ summary: 'Get all approved providers' })
@@ -92,10 +94,23 @@ export class ProviderProfileController {
     @CurrentUser() currentUser: TokenPayload,
     @Body() dto: CreateProviderProfileDto,
   ) {
+    const referralCode = dto.referralCode?.trim();
+    const resolvedReferral = referralCode
+      ? await this.providerReferralsService.validateCode(
+          currentUser.userId,
+          referralCode,
+        )
+      : null;
     const profile = await this.createProviderProfileUseCase.execute(
       currentUser.userId,
       dto.bio ?? null,
     );
+    if (resolvedReferral) {
+      await this.providerReferralsService.linkReferredProfile(
+        profile.id,
+        resolvedReferral.id,
+      );
+    }
 
     return ProviderProfileResponseDto.fromEntity(profile);
   }

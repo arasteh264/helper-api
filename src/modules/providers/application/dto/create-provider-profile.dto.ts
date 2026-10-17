@@ -10,4 +10,14 @@ export class CreateProviderProfileDto {
   @IsString()
   @MaxLength(500)
   bio?: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'A1B2C3D4E5',
+    description: 'Optional referral code from another provider',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  referralCode?: string;
 }

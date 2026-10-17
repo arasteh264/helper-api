@@ -149,10 +149,15 @@ export class ProviderArticlesService {
   async submit(userId: string, input: SubmitProviderArticleDto) {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, canPublishArticles: true },
     });
     if (!profile) {
       throw new ForbiddenException('ثبت مقاله برای پروفایل متخصص مجاز است');
+    }
+    if (!profile.canPublishArticles) {
+      throw new ForbiddenException(
+        'دسترسی انتشار مقاله برای پروفایل شما هنوز توسط مدیر فعال نشده است',
+      );
     }
     this.validateArticle(input);
     await this.validateTaxonomy(input);

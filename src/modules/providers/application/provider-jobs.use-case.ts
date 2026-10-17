@@ -13,6 +13,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import type { ProviderDeclineReason } from './dto/decline-service-request.dto';
 import type { SubmitServiceRequestQuoteDto } from './dto/submit-service-request-quote.dto';
 import { QuoteItemSupplyMode } from './dto/submit-service-request-quote.dto';
+import type { CompleteServiceRequestDto } from './dto/complete-service-request.dto';
 
 @Injectable()
 export class ProviderJobsUseCase {
@@ -112,6 +113,7 @@ export class ProviderJobsUseCase {
               author: { select: { id: true, name: true, role: true } },
             },
           },
+          workReport: true,
         },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -240,6 +242,15 @@ export class ProviderJobsUseCase {
           : {}),
         note: request.description,
         images: request.images.map((image) => image.url),
+        workReport:
+          'workReport' in request && request.workReport
+            ? {
+                ...request.workReport,
+                materials: Array.isArray(request.workReport.materials)
+                  ? request.workReport.materials
+                  : [],
+              }
+            : null,
         ...(request.disputeReason
           ? {
               disputeReason: request.disputeReason,
@@ -559,14 +570,84 @@ export class ProviderJobsUseCase {
     );
   }
 
-  async complete(userId: string, requestId: string) {
-    return this.transitionAssignedRequest(
-      userId,
-      requestId,
-      'IN_PROGRESS',
-      'AWAITING_CUSTOMER_CONFIRMATION',
-      'کار برای تأیید مشتری ارسال شد',
-    );
+  async complete(
+    userId: string,
+    requestId: string,
+    input: CompleteServiceRequestDto,
+  ) {
+    const profile = await this.getApprovedProfile(userId);
+    const summary = input.summary.trim();
+    const materials = (input.materials ?? [])
+      .map((material) => material.trim())
+      .filter(Boolean);
+    if (summary.length < 10) {
+      throw new BadRequestException('شرح کار را حداقل در ۱۰ نویسه بنویسید');
+    }
+    if (materials.length > 50 || materials.some((material) => material.length > 200)) {
+      throw new BadRequestException('فهرست قطعات و اقلام مصرفی معتبر نیست');
+    }
+
+    const request = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        acceptedProviderProfileId: profile.id,
+        status: 'IN_PROGRESS',
+        payments: { some: { status: 'PAID' } },
+      },
+      select: { id: true, customerId: true, title: true },
+    });
+    if (!request) {
+      throw new ConflictException('این کار در وضعیت قابل ثبت گزارش نیست');
+    }
+
+    const completedAt = new Date();
+    const warrantyDays = input.warrantyDays ?? null;
+    const warrantyExpiresAt =
+      warrantyDays && warrantyDays > 0
+        ? new Date(completedAt.getTime() + warrantyDays * 24 * 60 * 60 * 1000)
+        : null;
+    const report = await this.prisma.$transaction(async (tx) => {
+      const createdReport = await tx.serviceWorkReport.create({
+        data: {
+          serviceRequestId: request.id,
+          providerProfileId: profile.id,
+          summary,
+          materials,
+          warrantyDays,
+          warrantyNote: input.warrantyNote?.trim() || null,
+          completedAt,
+          warrantyExpiresAt,
+        },
+      });
+      const updated = await tx.serviceRequest.updateMany({
+        where: {
+          id: request.id,
+          acceptedProviderProfileId: profile.id,
+          status: 'IN_PROGRESS',
+          payments: { some: { status: 'PAID' } },
+        },
+        data: {
+          status: 'AWAITING_CUSTOMER_CONFIRMATION',
+          customerConfirmationDeadline: new Date(
+            completedAt.getTime() + 72 * 60 * 60 * 1000,
+          ),
+        },
+      });
+      if (!updated.count) {
+        throw new ConflictException('وضعیت این کار تغییر کرده است');
+      }
+      return createdReport;
+    });
+
+    await this.notifications.createForUser({
+      userId: request.customerId,
+      category: 'WORK_UPDATES',
+      type: 'SERVICE_REQUEST_STATUS',
+      title: 'گزارش پایان کار آماده است',
+      body: `متخصص گزارش کار «${request.title}» را ثبت کرد. جزئیات و ضمانت را در پرونده‌ی درخواست ببینید.`,
+      serviceRequestId: request.id,
+    });
+    return { message: 'گزارش کار برای تأیید مشتری ارسال شد', report };
   }
 
   private async transitionAssignedRequest(

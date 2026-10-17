@@ -9,6 +9,7 @@ import { CreateServiceRequestDisputeMessageDto } from '../../../payments/dto/cre
 import { RaiseProviderNonPaymentDisputeDto } from '../../application/dto/raise-provider-non-payment-dispute.dto';
 import { DeclineServiceRequestDto } from '../../application/dto/decline-service-request.dto';
 import { SubmitServiceRequestQuoteDto } from '../../application/dto/submit-service-request-quote.dto';
+import { CompleteServiceRequestDto } from '../../application/dto/complete-service-request.dto';
 
 @ApiTags('Provider Jobs')
 @ApiBearerAuth()
@@ -77,8 +78,9 @@ export class ProviderJobsController {
   complete(
     @CurrentUser() user: TokenPayload,
     @Param('requestId') requestId: string,
+    @Body() dto: CompleteServiceRequestDto,
   ) {
-    return this.providerJobsUseCase.complete(user.userId, requestId);
+    return this.providerJobsUseCase.complete(user.userId, requestId, dto);
   }
 
   @ApiOperation({ summary: 'Reply to an active service dispute' })

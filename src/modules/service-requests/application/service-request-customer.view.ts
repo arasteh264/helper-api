@@ -30,6 +30,16 @@ export type CustomerViewSource = {
   createdAt: Date;
   skills: { skill: { name: string } }[];
   specialtyName?: string | null;
+  specialty?: { id: string; name: string } | null;
+  specialtyId?: string | null;
+  workReport?: {
+    summary: string;
+    materials: unknown;
+    warrantyDays: number | null;
+    warrantyNote: string | null;
+    completedAt: Date;
+    warrantyExpiresAt: Date | null;
+  } | null;
   images: { id: string; url: string }[];
   acceptedProviderProfile: {
     id: string;
@@ -64,8 +74,10 @@ export function toCustomerView(request: CustomerViewSource) {
     code: `R-${request.id.slice(0, 8).toUpperCase()}`,
     title: request.title,
     category:
+      request.specialty?.name ??
       request.specialtyName ??
       request.skills.map((item) => item.skill.name).join('، '),
+    specialtyId: request.specialty?.id ?? request.specialtyId ?? null,
     description: request.description,
     addressLabel: request.address ?? '',
     latitude: request.latitude,
@@ -120,7 +132,8 @@ export function toCustomerView(request: CustomerViewSource) {
           name: provider.user.name,
           field:
             request.specialtyName ??
-            request.skills.map((item) => item.skill.name).join('، '),
+              request.specialty?.name ??
+              request.skills.map((item) => item.skill.name).join('، '),
           rating: provider.rating,
           ...(request.payments?.length ? { phone: provider.user.phone } : {}),
         }
@@ -136,5 +149,18 @@ export function toCustomerView(request: CustomerViewSource) {
         }
       : null,
     wasPaid: (request.payments?.length ?? 0) > 0,
+    workReport: request.workReport
+      ? {
+          summary: request.workReport.summary,
+          materials: Array.isArray(request.workReport.materials)
+            ? request.workReport.materials
+            : [],
+          warrantyDays: request.workReport.warrantyDays,
+          warrantyNote: request.workReport.warrantyNote,
+          completedAt: request.workReport.completedAt.toISOString(),
+          warrantyExpiresAt:
+            request.workReport.warrantyExpiresAt?.toISOString() ?? null,
+        }
+      : null,
   };
 }

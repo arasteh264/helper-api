@@ -23,10 +23,18 @@ function createFixture(pricingMode: 'QUOTE' | 'HOURLY', rate: number | null) {
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    serviceWorkReport: {
+      create: jest.fn().mockResolvedValue({ id: 'report-1' }),
+    },
   };
   const prisma = {
     serviceRequest: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'request-1',
+        customerId: 'customer-user',
+        title: 'تعمیرات',
+      }),
       findUniqueOrThrow: jest.fn().mockResolvedValue({
         customerId: 'customer-user',
         title: 'تعمیرات',
@@ -168,14 +176,26 @@ describe('ProviderJobsUseCase work status notifications', () => {
   });
 
   it('notifies the customer when the assigned provider completes the work', async () => {
-    const { useCase, notifications } = createFixture('QUOTE', null);
+    const { useCase, transaction, notifications } = createFixture('QUOTE', null);
 
     await expect(
-      useCase.complete('provider-user', 'request-1'),
+      useCase.complete('provider-user', 'request-1', {
+        summary: 'تعمیر و بررسی دستگاه به پایان رسید',
+      }),
     ).resolves.toEqual({
-      message: 'کار برای تأیید مشتری ارسال شد',
+      message: 'گزارش کار برای تأیید مشتری ارسال شد',
+      report: { id: 'report-1' },
     });
 
+    expect(transaction.serviceWorkReport.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          serviceRequestId: 'request-1',
+          providerProfileId: 'provider-profile-1',
+          summary: 'تعمیر و بررسی دستگاه به پایان رسید',
+        }),
+      }),
+    );
     expect(notifications.createForUser).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'customer-user',

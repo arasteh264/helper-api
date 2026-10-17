@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -30,6 +31,15 @@ export class UpdateProviderProfileUseCase {
   ) {
     const profile = await this.providerProfileRepository.findByUserId(userId);
     if (!profile) throw new NotFoundException('Provider profile not found');
+
+    if (
+      dto.isAvailable === true &&
+      profile.verificationStatus !== 'APPROVED'
+    ) {
+      throw new ForbiddenException(
+        'پس از تأیید مدارک و پروفایل توسط مدیر می‌توانید آماده‌ی دریافت کار شوید',
+      );
+    }
 
     if (
       dto.isAvailable === true &&
