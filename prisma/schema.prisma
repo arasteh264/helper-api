@@ -105,6 +105,12 @@ enum ProviderStoryApprovalAction {
   SET_PRICING
 }
 
+enum ProviderReferralRewardType {
+  STORY_PUBLISHING
+  ARTICLE_PUBLISHING
+  ZERO_COMMISSION
+}
+
 model User {
   id                            String                         @id @default(uuid())
   name                          String
@@ -371,8 +377,39 @@ model ProviderProfile {
   storyPayments           ProviderStoryPayment[]      @relation("ProviderStoryProfilePayments")
   articles                ProviderArticle[]
   invoices                Invoice[]
+  workReports             ServiceWorkReport[]
   canPublishStories       Boolean                     @default(false)
   canViewStoryStats       Boolean                     @default(false)
+  canPublishArticles      Boolean                     @default(false)
+  commissionExempt        Boolean                     @default(false)
+  referralCode            ProviderReferralCode?
+  referralReceived        ProviderReferral?           @relation("ProviderReferralInvitee")
+}
+
+model ProviderReferralCode {
+  id                String   @id @default(uuid())
+  providerProfileId String   @unique
+  code              String   @unique
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile   @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  referrals       ProviderReferral[]
+}
+
+model ProviderReferral {
+  id                       String                      @id @default(uuid())
+  referralCodeId           String
+  referredProviderProfileId String                      @unique
+  rewardType               ProviderReferralRewardType?
+  rewardedAt               DateTime?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+
+  referralCode           ProviderReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Restrict)
+  referredProviderProfile ProviderProfile      @relation("ProviderReferralInvitee", fields: [referredProviderProfileId], references: [id], onDelete: Cascade)
+
+  @@index([referralCodeId, createdAt])
+  @@index([rewardType, rewardedAt])
 }
 
 model SpecialtyGroup {
@@ -560,6 +597,7 @@ model ServiceRequest {
   chatConversation        ChatConversation?
   disputeMessages         ServiceRequestDisputeMessage[]
   invoice                 Invoice?
+  workReport              ServiceWorkReport?
 
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
@@ -585,6 +623,26 @@ model Invoice {
 
   @@index([customerId, status, createdAt(sort: Desc)])
   @@index([providerProfileId, createdAt(sort: Desc)])
+}
+
+model ServiceWorkReport {
+  id               String   @id @default(uuid())
+  serviceRequestId String   @unique
+  providerProfileId String
+  summary          String   @db.Text
+  materials        Json     @default("[]")
+  warrantyDays     Int?
+  warrantyNote     String?  @db.Text
+  completedAt      DateTime @default(now())
+  warrantyExpiresAt DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([providerProfileId, completedAt(sort: Desc)])
+  @@index([warrantyExpiresAt])
 }
 
 model ServiceRequestQuote {

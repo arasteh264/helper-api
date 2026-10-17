@@ -372,7 +372,7 @@ export class ServiceRequestController {
       where: { id },
       include: {
         skills: { include: { skill: true } },
-        specialty: { select: { name: true } },
+        specialty: { select: { id: true, name: true } },
         images: true,
         acceptedProviderProfile: {
           include: { user: { select: { name: true, phone: true } } },
@@ -394,6 +394,7 @@ export class ServiceRequestController {
             author: { select: { id: true, name: true, role: true } },
           },
         },
+        workReport: true,
       },
     });
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
@@ -671,7 +672,7 @@ export class ServiceRequestController {
     }[];
     createdAt: Date;
     skills: { skill: { name: string } }[];
-    specialty: { name: string } | null;
+    specialty: { id: string; name: string } | null;
     images: { id: string; url: string }[];
     acceptedProviderProfile: {
       id: string;
@@ -685,6 +686,14 @@ export class ServiceRequestController {
       createdAt: Date;
     } | null;
     payments: { id: string }[];
+    workReport: {
+      summary: string;
+      materials: unknown;
+      warrantyDays: number | null;
+      warrantyNote: string | null;
+      completedAt: Date;
+      warrantyExpiresAt: Date | null;
+    } | null;
   }) {
     const provider = request.acceptedProviderProfile;
     const status =
@@ -707,6 +716,7 @@ export class ServiceRequestController {
         request.specialty?.name ??
         request.skills.map((item) => item.skill.name).join('، '),
       description: request.description,
+      specialtyId: request.specialty?.id ?? null,
       addressLabel: request.address ?? '',
       latitude: request.latitude,
       longitude: request.longitude,
@@ -779,6 +789,19 @@ export class ServiceRequestController {
           }
         : null,
       wasPaid: request.payments.length > 0,
+      workReport: request.workReport
+        ? {
+            summary: request.workReport.summary,
+            materials: Array.isArray(request.workReport.materials)
+              ? request.workReport.materials
+              : [],
+            warrantyDays: request.workReport.warrantyDays,
+            warrantyNote: request.workReport.warrantyNote,
+            completedAt: request.workReport.completedAt.toISOString(),
+            warrantyExpiresAt:
+              request.workReport.warrantyExpiresAt?.toISOString() ?? null,
+          }
+        : null,
     };
   }
 

@@ -46,6 +46,8 @@ import { ProviderStoriesController } from './presentation/controllers/provider-s
 import { PublicProviderStoriesController } from './presentation/controllers/public-provider-stories.controller';
 import { ProviderStoryChatController } from './presentation/controllers/provider-story-chat.controller';
 import { ProviderStoryChatService } from './application/services/provider-story-chat.service';
+import { ProviderReferralsService } from './application/provider-referrals.service';
+import { ProviderReferralsController } from './presentation/controllers/provider-referrals.controller';
 
 @Module({
   imports: [
@@ -57,6 +59,7 @@ import { ProviderStoryChatService } from './application/services/provider-story-
   ],
   controllers: [
     ProviderProfileController,
+    ProviderReferralsController,
     AdminProviderController,
     ProviderOnboardingController,
     ProviderJobsController,
@@ -71,6 +74,7 @@ import { ProviderStoryChatService } from './application/services/provider-story-
     ProviderStoriesService,
     PublicProviderStoriesService,
     ProviderStoryChatService,
+    ProviderReferralsService,
 
     CreateProviderProfileUseCase,
     AddSkillToProviderUseCase,

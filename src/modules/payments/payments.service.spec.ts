@@ -381,6 +381,11 @@ describe('PaymentsService', () => {
           commissionRate: 10,
         }),
       },
+      providerProfile: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          commissionExempt: false,
+        }),
+      },
       walletTransaction: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
@@ -423,6 +428,55 @@ describe('PaymentsService', () => {
       }),
     );
     expect(result.releasedAmountToman).toBe(470000);
+  });
+
+  it('releases the full amount when the provider has a referral commission reward', async () => {
+    const tx = {
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          title: 'تعمیرات',
+          customerId: 'customer-1',
+          acceptedProviderProfileId: 'provider-profile-1',
+          providerPriceToman: 500000,
+          providerLaborPriceToman: 300000,
+          acceptedProviderProfile: { userId: 'provider-1' },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      wallet: {
+        upsert: jest.fn().mockResolvedValue({ id: 'wallet-1' }),
+        update: jest.fn().mockResolvedValue({ balance: 500000 }),
+      },
+      walletConfiguration: {
+        upsert: jest.fn().mockResolvedValue({
+          id: 'global',
+          commissionRate: 10,
+        }),
+      },
+      providerProfile: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          commissionExempt: true,
+        }),
+      },
+      walletTransaction: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+
+    const result = await service.confirmCompletion('customer-1', 'request-1');
+
+    expect(tx.wallet.update).toHaveBeenCalledTimes(1);
+    expect(tx.walletTransaction.create).toHaveBeenCalledTimes(1);
+    expect(result.releasedAmountToman).toBe(500000);
   });
 
   it('lets the customer withdraw an active dispute and confirm completion', async () => {

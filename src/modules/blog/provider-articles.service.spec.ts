@@ -40,7 +40,10 @@ describe('ProviderArticlesService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.providerProfile.findUnique.mockResolvedValue({ id: 'profile-1' });
+    prisma.providerProfile.findUnique.mockResolvedValue({
+      id: 'profile-1',
+      canPublishArticles: true,
+    });
     prisma.specialtyGroup.findMany.mockResolvedValue([{ id: 'group-1' }]);
     prisma.specialty.findMany.mockResolvedValue([
       { id: 'specialty-1', groupId: 'group-1' },
@@ -79,6 +82,18 @@ describe('ProviderArticlesService', () => {
     await expect(service.submit('customer-1', input)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+    expect(prisma.providerArticle.create).not.toHaveBeenCalled();
+  });
+
+  it('requires admin-granted article publishing access', async () => {
+    prisma.providerProfile.findUnique.mockResolvedValue({
+      id: 'profile-1',
+      canPublishArticles: false,
+    });
+
+    await expect(
+      service.submit('provider-user-1', input),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.providerArticle.create).not.toHaveBeenCalled();
   });
 

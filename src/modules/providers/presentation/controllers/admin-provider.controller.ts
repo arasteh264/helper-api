@@ -38,6 +38,8 @@ import { SmsService } from '../../../sms/sms.service';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import { CreateProviderInvitationBatchDto } from '../../application/dto/create-provider-invitation-batch.dto';
 import { RemindProviderInvitationBatchDto } from '../../application/dto/remind-provider-invitation-batch.dto';
+import { ProviderReferralsService } from '../../application/provider-referrals.service';
+import { GrantProviderReferralRewardDto } from '../../application/dto/grant-provider-referral-reward.dto';
 
 @ApiTags('Admin - Providers')
 @ApiBearerAuth()
@@ -57,6 +59,7 @@ export class AdminProviderController {
     private readonly providerOnboardingService: ProviderOnboardingService,
     private readonly smsService: SmsService,
     private readonly prisma: PrismaService,
+    private readonly providerReferralsService: ProviderReferralsService,
   ) {}
 
   @ApiOperation({ summary: 'Invite a provider to complete registration by SMS' })
@@ -186,6 +189,26 @@ export class AdminProviderController {
     return this.getAdminProviderInsightsUseCase.execute();
   }
 
+  @ApiOperation({ summary: 'List provider referrals and reward eligibility' })
+  @Get('referrals')
+  listReferrals() {
+    return this.providerReferralsService.listForAdmin();
+  }
+
+  @ApiOperation({ summary: 'Grant one admin-selected reward for a referral' })
+  @Post('referrals/:referralId/reward')
+  grantReferralReward(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('referralId') referralId: string,
+    @Body() dto: GrantProviderReferralRewardDto,
+  ) {
+    return this.providerReferralsService.grantReward(
+      referralId,
+      currentUser.userId,
+      dto.rewardType,
+    );
+  }
+
   @ApiOperation({ summary: 'Get declined service request history for a provider' })
   @Get(':providerId/declines')
   getDeclines(@Param('providerId') providerId: string) {
@@ -262,6 +285,9 @@ export class AdminProviderController {
     const shouldSendApprovalSms =
       dto.status === 'APPROVED' &&
       profile.verificationStatus !== 'APPROVED';
+    if (dto.status !== 'APPROVED') {
+      profile.setAvailability(false);
+    }
     profile.reviewDecision(dto.status, dto.note);
     await this.providerProfileRepository.update(profile);
 

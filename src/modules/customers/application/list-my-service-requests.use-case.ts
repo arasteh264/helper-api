@@ -46,7 +46,7 @@ export class ListMyServiceRequestsUseCase {
           where,
           include: {
             skills: { include: { skill: true } },
-            specialty: { select: { name: true } },
+            specialty: { select: { id: true, name: true } },
             images: true,
             acceptedProviderProfile: {
               include: { user: { select: { name: true, phone: true } } },
@@ -66,6 +66,7 @@ export class ListMyServiceRequestsUseCase {
                 author: { select: { id: true, name: true, role: true } },
               },
             },
+            workReport: true,
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           skip: (input.page - 1) * input.pageSize,

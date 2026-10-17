@@ -201,7 +201,7 @@ export class PrismaWalletRepository implements WalletRepository {
   async credit(input: CreditWalletInput): Promise<CreditResult> {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { id: input.providerProfileId },
-      select: { id: true },
+      select: { id: true, commissionExempt: true },
     });
     if (!profile) return { status: 'PROVIDER_NOT_FOUND' };
 
@@ -213,7 +213,8 @@ export class PrismaWalletRepository implements WalletRepository {
           where: { id: 'global' },
         });
         const commission =
-          input.type === WalletTransactionType.EARNING
+          input.type === WalletTransactionType.EARNING &&
+          !profile.commissionExempt
             ? Math.round((input.amount * settings.commissionRate) / 100)
             : 0;
         const grossBalance = await db.wallet.update({

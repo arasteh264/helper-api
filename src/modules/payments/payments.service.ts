@@ -1105,9 +1105,13 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
       const commissionBase =
         request.providerLaborPriceToman ?? request.providerPriceToman;
-      const commission = Math.round(
-        (commissionBase * configuration.commissionRate) / 100,
-      );
+      const providerProfile = await tx.providerProfile.findUniqueOrThrow({
+        where: { id: request.acceptedProviderProfileId },
+        select: { commissionExempt: true },
+      });
+      const commission = providerProfile.commissionExempt
+        ? 0
+        : Math.round((commissionBase * configuration.commissionRate) / 100);
       if (commission > 0) {
         const netBalance = await tx.wallet.update({
           where: { id: wallet.id },
