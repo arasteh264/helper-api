@@ -114,7 +114,7 @@ export class AdminServiceRequestController {
       });
       if (!request) throw new NotFoundException('درخواست سرویس پیدا نشد');
       if (request.status !== 'PENDING_ADMIN_REVIEW') {
-        throw new ConflictException('این درخواست در انتظار بررسی مدیر نیست');
+        throw new ConflictException('این درخواست در انتظار بررسی پشتیبانی نیست');
       }
       const updated = await transaction.serviceRequest.updateMany({
         where: { id, status: 'PENDING_ADMIN_REVIEW' },
@@ -307,8 +307,8 @@ export class AdminServiceRequestController {
 
     const approved = dto.decision === 'APPROVE';
     const message = approved
-      ? `درخواست لغو کار «${result.serviceRequestTitle}» توسط مدیر تأیید شد.`
-      : `درخواست لغو کار «${result.serviceRequestTitle}» توسط مدیر رد شد.${note ? ` دلیل: ${note}` : ''}`;
+      ? `درخواست لغو کار «${result.serviceRequestTitle}» توسط پشتیبانی تأیید شد.`
+      : `درخواست لغو کار «${result.serviceRequestTitle}» توسط پشتیبانی رد شد.${note ? ` دلیل: ${note}` : ''}`;
     await Promise.all([
       this.notifications.createForUser({
         userId: result.customerId,

@@ -642,6 +642,7 @@ model ServiceRequestProviderCancellation {
 }
 
 enum PriceAdjustmentStatus {
+  PENDING_SUPPORT_REVIEW
   PENDING
   APPROVED
   REJECTED
@@ -657,7 +658,9 @@ model ServiceRequestPriceAdjustment {
   previousTotalToman Int
   newTotalToman      Int
   amountToman        Int
-  status             PriceAdjustmentStatus @default(PENDING)
+  status             PriceAdjustmentStatus @default(PENDING_SUPPORT_REVIEW)
+  reviewNote         String?               @db.Text
+  reviewedAt         DateTime?
   respondedAt        DateTime?
   paidAt             DateTime?
   createdAt          DateTime              @default(now())

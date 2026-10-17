@@ -206,7 +206,7 @@ export class ProviderReferralsService {
         data: { rewardType, rewardedAt: new Date() },
       });
       if (updatedReferral.count !== 1) {
-        throw new ConflictException('این دعوت هم‌زمان توسط مدیر دیگری بررسی شد');
+        throw new ConflictException('این دعوت هم‌زمان توسط پشتیبانی دیگری بررسی شد');
       }
 
       const accessChanges =

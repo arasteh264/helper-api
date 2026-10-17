@@ -338,122 +338,6 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         throw new ConflictException('این درخواست هنوز آماده‌ی پرداخت نیست');
       }
 
-      async createPriceAdjustmentCheckout(userId: string, adjustmentId: string) {
-        const config = this.getConfig();
-        const reservation = await this.prisma.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT "id" FROM "ServiceRequestPriceAdjustment" WHERE "id" = ${adjustmentId} FOR UPDATE`;
-
-          const adjustment = await tx.serviceRequestPriceAdjustment.findFirst({
-            where: {
-              id: adjustmentId,
-              status: 'APPROVED',
-              serviceRequest: {
-                customerId: userId,
-                status: 'IN_PROGRESS',
-              },
-            },
-            select: {
-              id: true,
-              amountToman: true,
-              serviceRequestId: true,
-              payments: {
-                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-                take: 1,
-                select: { status: true, authority: true },
-              },
-            },
-          });
-          if (!adjustment) {
-            throw new NotFoundException(
-              'اصلاح مبلغ تأییدشده و قابل پرداخت پیدا نشد',
-            );
-          }
-
-          const latestPayment = adjustment.payments[0];
-          if (latestPayment?.status === 'PAID') {
-            throw new ConflictException('این اصلاح مبلغ قبلاً پرداخت شده است');
-          }
-          if (latestPayment?.status === 'PENDING') {
-            if (latestPayment.authority) {
-              return {
-                existingAuthority: latestPayment.authority,
-                requestId: adjustment.serviceRequestId,
-              } satisfies CheckoutReservation;
-            }
-            throw new ConflictException(
-              'پرداخت این اصلاح مبلغ در حال آماده‌سازی است',
-            );
-          }
-
-          const payment = await tx.payment.create({
-            data: {
-              serviceRequestId: adjustment.serviceRequestId,
-              priceAdjustmentId: adjustment.id,
-              amountToman: adjustment.amountToman,
-            },
-            select: { id: true },
-          });
-          return {
-            paymentId: payment.id,
-            amountToman: adjustment.amountToman,
-            requestId: adjustment.serviceRequestId,
-          } satisfies CheckoutReservation;
-        });
-
-        if ('existingAuthority' in reservation) {
-          return {
-            paymentUrl: this.getStartPayUrl(
-              config.sandbox,
-              reservation.existingAuthority,
-            ),
-            requestId: reservation.requestId,
-          };
-        }
-
-        const amountRial = reservation.amountToman * 10;
-        if (!Number.isSafeInteger(amountRial)) {
-          await this.markFailed(reservation.paymentId, 'مبلغ پرداخت معتبر نیست');
-          throw new BadGatewayException('مبلغ پرداخت معتبر نیست');
-        }
-
-        try {
-          const reply = await this.post<ZarinpalReply>(
-            this.getApiUrl(config.sandbox, 'request'),
-            {
-              merchant_id: config.merchantId,
-              amount: amountRial,
-              callback_url: config.callbackUrl,
-              description: `مابه‌التفاوت درخواست ${reservation.requestId}`,
-            },
-          );
-          const authority = reply.data?.authority;
-          if (reply.data?.code !== 100 || !authority) {
-            await this.markFailed(
-              reservation.paymentId,
-              reply.data?.message ?? `Zarinpal code ${reply.data?.code}`,
-            );
-            throw new BadGatewayException('درگاه پرداخت درخواست را نپذیرفت');
-          }
-
-          await this.prisma.payment.update({
-            where: { id: reservation.paymentId },
-            data: { authority },
-          });
-          return {
-            paymentUrl: this.getStartPayUrl(config.sandbox, authority),
-            requestId: reservation.requestId,
-          };
-        } catch (error) {
-          if (!(error instanceof BadGatewayException)) {
-            await this.markFailed(
-              reservation.paymentId,
-              error instanceof Error ? error.message : 'Zarinpal request failed',
-            );
-            throw new BadGatewayException('ارتباط با درگاه پرداخت برقرار نشد');
-          }
-          throw error;
-        }
-      }
       if (!request.providerPriceToman || request.providerPriceToman <= 0) {
         throw new ConflictException('قیمت نهایی provider ثبت نشده است');
       }
@@ -523,6 +407,126 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         const reason =
           reply.data?.message ?? `Zarinpal code ${reply.data?.code}`;
         await this.markFailed(reservation.paymentId, reason);
+        throw new BadGatewayException('درگاه پرداخت درخواست را نپذیرفت');
+      }
+
+      await this.prisma.payment.update({
+        where: { id: reservation.paymentId },
+        data: { authority },
+      });
+      return {
+        paymentUrl: this.getStartPayUrl(config.sandbox, authority),
+        requestId: reservation.requestId,
+      };
+    } catch (error) {
+      if (!(error instanceof BadGatewayException)) {
+        await this.markFailed(
+          reservation.paymentId,
+          error instanceof Error ? error.message : 'Zarinpal request failed',
+        );
+        throw new BadGatewayException('ارتباط با درگاه پرداخت برقرار نشد');
+      }
+      throw error;
+    }
+  }
+
+  async createPriceAdjustmentCheckout(userId: string, adjustmentId: string) {
+    const config = this.getConfig();
+    const reservation = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceRequestPriceAdjustment" WHERE "id" = ${adjustmentId} FOR UPDATE`;
+
+      const adjustment = await tx.serviceRequestPriceAdjustment.findFirst({
+        where: {
+          id: adjustmentId,
+          status: 'APPROVED',
+          serviceRequest: {
+            customerId: userId,
+            status: 'IN_PROGRESS',
+          },
+        },
+        select: {
+          id: true,
+          amountToman: true,
+          serviceRequestId: true,
+          payments: {
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: 1,
+            select: { status: true, authority: true },
+          },
+        },
+      });
+      if (!adjustment) {
+        throw new NotFoundException(
+          'اصلاح مبلغ تأییدشده و قابل پرداخت پیدا نشد',
+        );
+      }
+
+      const latestPayment = adjustment.payments[0];
+      if (latestPayment?.status === 'PAID') {
+        throw new ConflictException('این اصلاح مبلغ قبلاً پرداخت شده است');
+      }
+      if (latestPayment?.status === 'PENDING') {
+        if (latestPayment.authority) {
+          return {
+            existingAuthority: latestPayment.authority,
+            requestId: adjustment.serviceRequestId,
+          } satisfies CheckoutReservation;
+        }
+        throw new ConflictException(
+          'پرداخت این اصلاح مبلغ در حال آماده‌سازی است',
+        );
+      }
+
+      const payment = await tx.payment.create({
+        data: {
+          serviceRequestId: adjustment.serviceRequestId,
+          priceAdjustmentId: adjustment.id,
+          amountToman: adjustment.amountToman,
+        },
+        select: { id: true },
+      });
+      return {
+        paymentId: payment.id,
+        amountToman: adjustment.amountToman,
+        requestId: adjustment.serviceRequestId,
+      } satisfies CheckoutReservation;
+    });
+
+    if (
+      'existingAuthority' in reservation &&
+      typeof reservation.existingAuthority === 'string'
+    ) {
+      return {
+        paymentUrl: this.getStartPayUrl(
+          config.sandbox,
+          reservation.existingAuthority,
+        ),
+        requestId: reservation.requestId,
+      };
+    }
+
+    const amountRial = reservation.amountToman * 10;
+    if (!Number.isSafeInteger(amountRial)) {
+      await this.markFailed(reservation.paymentId, 'مبلغ پرداخت معتبر نیست');
+      throw new BadGatewayException('مبلغ پرداخت معتبر نیست');
+    }
+
+    try {
+      const reply = await this.post<ZarinpalReply>(
+        this.getApiUrl(config.sandbox, 'request'),
+        {
+          merchant_id: config.merchantId,
+          amount: amountRial,
+          callback_url: config.callbackUrl,
+          description: `مابه‌التفاوت درخواست ${reservation.requestId}`,
+        },
+      );
+      const authority = reply.data?.authority;
+      if (reply.data?.code !== 100 || !authority) {
+        await this.markFailed(
+          reservation.paymentId,
+          reply.data?.message ?? `Zarinpal code ${reply.data?.code}`,
+        );
         throw new BadGatewayException('درگاه پرداخت درخواست را نپذیرفت');
       }
 

@@ -586,7 +586,7 @@ describe('PaymentsService', () => {
       id: 'message-1',
       body: 'لطفاً تصویر فاکتور را ارسال کنید',
       createdAt: new Date('2026-10-07T09:00:00.000Z'),
-      author: { id: 'admin-1', name: 'مدیر', role: 'ADMIN' },
+      author: { id: 'admin-1', name: 'پشتیبانی', role: 'ADMIN' },
     };
     const tx = {
       serviceRequestDisputeMessage: {
@@ -791,7 +791,7 @@ describe('PaymentsService', () => {
       }),
     });
     expect(tx.payment.updateMany).toHaveBeenCalledWith({
-      where: { id: 'payment-1', status: 'PAID' },
+      where: { id: { in: ['payment-1'] }, status: 'PAID' },
       data: { status: 'REFUNDED' },
     });
     expect(tx.customerWallet.update).toHaveBeenCalledWith({

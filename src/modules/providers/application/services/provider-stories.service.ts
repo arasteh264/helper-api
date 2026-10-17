@@ -304,7 +304,7 @@ export class ProviderStoriesService {
     const profile = await this.getAuthorizedProfile(userId);
     if (!profile.canViewStoryStats) {
       throw new ForbiddenException(
-        'نمایش آمار داستان هنوز توسط مدیر فعال نشده است',
+        'نمایش آمار داستان هنوز توسط پشتیبانی فعال نشده است',
       );
     }
     const story = await this.prisma.providerStory.findFirst({
@@ -490,7 +490,7 @@ export class ProviderStoriesService {
       throw new ForbiddenException('حساب متخصص برای این کار پیدا نشد');
     if (!profile.canPublishStories) {
       throw new ForbiddenException(
-        'مدیر هنوز دسترسی انتشار داستان را برای شما فعال نکرده است',
+        'پشتیبانی هنوز دسترسی انتشار داستان را برای شما فعال نکرده است',
       );
     }
     return profile;

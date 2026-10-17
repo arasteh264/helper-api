@@ -178,7 +178,7 @@ describe('ProviderJobsUseCase work status notifications', () => {
         note: cancellation.note,
       }),
     ).resolves.toMatchObject({
-      message: 'درخواست لغو برای بررسی مدیر ارسال شد',
+      message: 'درخواست لغو برای بررسی پشتیبانی ارسال شد',
       cancellationRequest: cancellation,
     });
     expect(transaction.serviceRequest.findFirst).toHaveBeenCalledWith(
