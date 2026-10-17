@@ -97,7 +97,33 @@ describe('CreateUserUseCase', () => {
     expect(userRepository.save).not.toHaveBeenCalled();
     expect(pendingRegistration.upsert).toHaveBeenCalled();
     expect(otpSender.send).toHaveBeenCalledWith(
-      input.email,
+      input.phone,
+      expect.any(String),
+      90,
+    );
+  });
+
+  it('allows registration without email and sends the OTP to the phone', async () => {
+    process.env.REQUIRE_REGISTRATION_OTP = 'true';
+
+    const inputWithoutEmail = {
+      name: input.name,
+      phone: input.phone,
+      password: input.password,
+    };
+    const result = await useCase.execute(inputWithoutEmail);
+
+    expect(result).toEqual({ registrationCompleted: false });
+    expect(pendingRegistration.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { phone: input.phone },
+        create: expect.objectContaining({
+          email: `${input.phone}@placeholder.local`,
+        }),
+      }),
+    );
+    expect(otpSender.send).toHaveBeenCalledWith(
+      input.phone,
       expect.any(String),
       90,
     );

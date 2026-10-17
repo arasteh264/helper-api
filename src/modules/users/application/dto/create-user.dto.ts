@@ -1,11 +1,17 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Length,
   MinLength,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+function normalizeOptionalEmail({ value }: { value: unknown }): unknown {
+  return typeof value === 'string' ? value.trim() || undefined : value;
+}
 
 export class CreateUserDto {
   @ApiProperty({
@@ -19,12 +25,14 @@ export class CreateUserDto {
   @Length(2, 100)
   name!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'test@test.com',
-    description: 'Unique email address',
+    description: 'Optional email address',
   })
+  @Transform(normalizeOptionalEmail)
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string;
 
   @ApiProperty({
     example: '09121234567',

@@ -182,6 +182,7 @@ export class PublicProvidersController {
       completedJobs: provider._count?.acceptedServiceRequests ?? 0,
       verified: provider.isVerified,
       available: provider.isAvailable,
+      serviceAreaRadiusKm: provider.serviceAreaRadiusKm,
       avatarUrl: provider.avatarUrl,
       hasServiceArea:
         provider.serviceAreaLatitude !== null &&

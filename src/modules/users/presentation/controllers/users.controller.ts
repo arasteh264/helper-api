@@ -250,7 +250,9 @@ export class UsersController {
       items: result.items.map((user) => ({
         id: user.id,
         name: user.name,
-        email: user.email,
+        email: user.email.endsWith('@placeholder.local')
+          ? null
+          : user.email,
         phone: user.phone,
         role: user.role,
         status: user.status,

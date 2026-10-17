@@ -12,7 +12,7 @@ import { User } from '../domain/entities/user.entity';
 
 interface CreateUserInput {
   name: string;
-  email: string;
+  email?: string;
   phone: string;
   password: string;
 }
@@ -41,7 +41,10 @@ export class CreateUserUseCase {
     | { registrationCompleted: true; accessToken: string }
     | { registrationCompleted: false }
   > {
-    const existingUser = await this.userRepository.findByEmail(input.email);
+    const email =
+      input.email?.trim().toLowerCase() ||
+      `${input.phone.trim()}@placeholder.local`;
+    const existingUser = await this.userRepository.findByEmail(email);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
@@ -51,7 +54,7 @@ export class CreateUserUseCase {
     }
 
     const pendingByEmail = await this.prisma.pendingRegistration.findUnique({
-      where: { email: input.email },
+      where: { email },
     });
     if (pendingByEmail && pendingByEmail.phone !== input.phone) {
       throw new ConflictException('Registration with this email is pending');
@@ -59,12 +62,7 @@ export class CreateUserUseCase {
 
     const passwordHash = await this.passwordHasher.hash(input.password);
     if (process.env.REQUIRE_REGISTRATION_OTP !== 'true') {
-      const user = User.create(
-        input.name,
-        input.email,
-        input.phone,
-        passwordHash,
-      );
+      const user = User.create(input.name, email, input.phone, passwordHash);
       await this.userRepository.save(user);
       await this.prisma.pendingRegistration.deleteMany({
         where: { phone: input.phone },
@@ -81,26 +79,26 @@ export class CreateUserUseCase {
 
     const otpCode = generateOtpCode();
     const otpExpiresAt = new Date(Date.now() + 90 * 1000);
-    
+
     await this.prisma.pendingRegistration.upsert({
       where: { phone: input.phone },
       update: {
         name: input.name,
-        email: input.email,
+        email,
         passwordHash,
         otpCode,
         otpExpiresAt,
       },
       create: {
         name: input.name,
-        email: input.email,
+        email,
         phone: input.phone,
         passwordHash,
         otpCode,
         otpExpiresAt,
       },
     });
-    await this.otpSender.send(input.email, otpCode, 90);
+    await this.otpSender.send(input.phone, otpCode, 90);
     return { registrationCompleted: false };
   }
 }
