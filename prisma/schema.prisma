@@ -133,7 +133,7 @@ model User {
   sentChatMessages              ChatMessage[]                  @relation("ChatMessageSender")
   moderatedChatMessages         ChatMessage[]                  @relation("ChatMessageModerator")
   providerStoryConversations    ProviderStoryConversation[]    @relation("ProviderStoryCustomer")
-  providerStoryMessages         ProviderStoryMessage[]        @relation("ProviderStoryMessageSender")
+  providerStoryMessages         ProviderStoryMessage[]         @relation("ProviderStoryMessageSender")
   notificationPreference        NotificationPreference?
   notifications                 Notification[]
   disputeMessages               ServiceRequestDisputeMessage[]
@@ -167,17 +167,17 @@ model AdminAuditLog {
 }
 
 model ProviderOnboardingInvitation {
-  id              String    @id @default(uuid())
-  phone           String
-  candidateName   String?
-  specialty       String?
-  tokenHash       String    @unique
-  expiresAt       DateTime
-  usedAt          DateTime?
-  revokedAt       DateTime?
-  smsSentAt       DateTime?
-  createdAt       DateTime  @default(now())
-  createdById     String
+  id            String    @id @default(uuid())
+  phone         String
+  candidateName String?
+  specialty     String?
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  usedAt        DateTime?
+  revokedAt     DateTime?
+  smsSentAt     DateTime?
+  createdAt     DateTime  @default(now())
+  createdById   String
 
   createdBy User @relation("ProviderOnboardingInvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
@@ -214,26 +214,26 @@ model BlogPost {
 }
 
 model ProviderArticle {
-  id                String               @id @default(uuid())
+  id                String                @id @default(uuid())
   providerProfileId String
-  slug              String               @unique
+  slug              String                @unique
   title             String
-  excerpt           String               @db.VarChar(320)
+  excerpt           String                @db.VarChar(320)
   content           Json
   coverImage        String?
   coverPublicId     String?
   coverAlt          String?
-  readingMinutes    Int                  @default(1)
+  readingMinutes    Int                   @default(1)
   status            ProviderArticleStatus @default(PENDING_REVIEW)
-  reviewNote        String?              @db.Text
+  reviewNote        String?               @db.Text
   reviewedById      String?
   reviewedAt        DateTime?
   publishedAt       DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
-  providerProfile ProviderProfile          @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
-  reviewedBy      User?                    @relation("ProviderArticleReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  providerProfile ProviderProfile            @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  reviewedBy      User?                      @relation("ProviderArticleReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   categories      ProviderArticleCategory[]
   specialties     ProviderArticleSpecialty[]
   ratings         ProviderArticleRating[]
@@ -243,11 +243,11 @@ model ProviderArticle {
 }
 
 model ProviderArticleCategory {
-  articleId       String
+  articleId        String
   specialtyGroupId String
 
-  article       ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  specialtyGroup SpecialtyGroup @relation(fields: [specialtyGroupId], references: [id], onDelete: Cascade)
+  article        ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  specialtyGroup SpecialtyGroup  @relation(fields: [specialtyGroupId], references: [id], onDelete: Cascade)
 
   @@id([articleId, specialtyGroupId])
   @@index([specialtyGroupId])
@@ -258,7 +258,7 @@ model ProviderArticleSpecialty {
   specialtyId String
 
   article   ProviderArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  specialty Specialty      @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+  specialty Specialty       @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
 
   @@id([articleId, specialtyId])
   @@index([specialtyId])
@@ -360,30 +360,31 @@ model ProviderProfile {
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
-  user                    User                        @relation(fields: [userId], references: [id])
-  skills                  ProviderSkill[]
-  specialties             ProviderSpecialty[]
-  documents               ProviderDocument[]
-  portfolioItems          PortfolioItem[]
-  acceptedServiceRequests ServiceRequest[]            @relation("AcceptedServiceRequests")
-  quotes                  ServiceRequestQuote[]
-  requestDeclines         ProviderRequestDecline[]
-  requestInvitations      ProviderRequestInvitation[]
-  wallet                  Wallet?
-  bankAccount             ProviderBankAccount?
-  reviews                 ServiceRequestReview[]      @relation("ProviderReviews")
-  stories                 ProviderStory[]
-  storyConversations      ProviderStoryConversation[]
-  storyPayments           ProviderStoryPayment[]      @relation("ProviderStoryProfilePayments")
-  articles                ProviderArticle[]
-  invoices                Invoice[]
-  workReports             ServiceWorkReport[]
-  canPublishStories       Boolean                     @default(false)
-  canViewStoryStats       Boolean                     @default(false)
-  canPublishArticles      Boolean                     @default(false)
-  commissionExempt        Boolean                     @default(false)
-  referralCode            ProviderReferralCode?
-  referralReceived        ProviderReferral?           @relation("ProviderReferralInvitee")
+  user                        User                                 @relation(fields: [userId], references: [id])
+  skills                      ProviderSkill[]
+  specialties                 ProviderSpecialty[]
+  documents                   ProviderDocument[]
+  portfolioItems              PortfolioItem[]
+  acceptedServiceRequests     ServiceRequest[]                     @relation("AcceptedServiceRequests")
+  serviceRequestCancellations ServiceRequestProviderCancellation[]
+  quotes                      ServiceRequestQuote[]
+  requestDeclines             ProviderRequestDecline[]
+  requestInvitations          ProviderRequestInvitation[]
+  wallet                      Wallet?
+  bankAccount                 ProviderBankAccount?
+  reviews                     ServiceRequestReview[]               @relation("ProviderReviews")
+  stories                     ProviderStory[]
+  storyConversations          ProviderStoryConversation[]
+  storyPayments               ProviderStoryPayment[]               @relation("ProviderStoryProfilePayments")
+  articles                    ProviderArticle[]
+  invoices                    Invoice[]
+  workReports                 ServiceWorkReport[]
+  canPublishStories           Boolean                              @default(false)
+  canViewStoryStats           Boolean                              @default(false)
+  canPublishArticles          Boolean                              @default(false)
+  commissionExempt            Boolean                              @default(false)
+  referralCode                ProviderReferralCode?
+  referralReceived            ProviderReferral?                    @relation("ProviderReferralInvitee")
 }
 
 model ProviderReferralCode {
@@ -392,20 +393,20 @@ model ProviderReferralCode {
   code              String   @unique
   createdAt         DateTime @default(now())
 
-  providerProfile ProviderProfile   @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile    @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
   referrals       ProviderReferral[]
 }
 
 model ProviderReferral {
-  id                       String                      @id @default(uuid())
-  referralCodeId           String
+  id                        String                      @id @default(uuid())
+  referralCodeId            String
   referredProviderProfileId String                      @unique
-  rewardType               ProviderReferralRewardType?
-  rewardedAt               DateTime?
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  rewardType                ProviderReferralRewardType?
+  rewardedAt                DateTime?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
 
-  referralCode           ProviderReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Restrict)
+  referralCode            ProviderReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Restrict)
   referredProviderProfile ProviderProfile      @relation("ProviderReferralInvitee", fields: [referredProviderProfileId], references: [id], onDelete: Cascade)
 
   @@index([referralCodeId, createdAt])
@@ -423,7 +424,7 @@ model SpecialtyGroup {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  specialties Specialty[]
+  specialties  Specialty[]
   articleLinks ProviderArticleCategory[]
 
   @@index([sortOrder])
@@ -445,7 +446,7 @@ model Specialty {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
-  group           SpecialtyGroup      @relation(fields: [groupId], references: [id])
+  group           SpecialtyGroup             @relation(fields: [groupId], references: [id])
   providers       ProviderSpecialty[]
   serviceRequests ServiceRequest[]
   providerStories ProviderStory[]
@@ -526,6 +527,21 @@ enum ServiceRequestStatus {
   DISPUTED
 }
 
+enum ProviderCancellationReason {
+  PROJECT_NOT_FOUND
+  CUSTOMER_UNAVAILABLE
+  ACCESS_ISSUE
+  SCOPE_MISMATCH
+  SAFETY_CONCERN
+  OTHER
+}
+
+enum ProviderCancellationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum PreferredTime {
   URGENT
   THIS_WEEK
@@ -584,24 +600,74 @@ model ServiceRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  skills                  ServiceRequestSkill[]
-  specialty               Specialty?                     @relation(fields: [specialtyId], references: [id])
-  quotes                  ServiceRequestQuote[]
-  images                  ServiceRequestImage[]
-  acceptedProviderProfile ProviderProfile?               @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
-  customer                User                           @relation("CustomerServiceRequests", fields: [customerId], references: [id], onDelete: Cascade)
-  providerDeclines        ProviderRequestDecline[]
-  invitations             ProviderRequestInvitation[]
-  payments                Payment[]
-  review                  ServiceRequestReview?
-  chatConversation        ChatConversation?
-  disputeMessages         ServiceRequestDisputeMessage[]
-  invoice                 Invoice?
-  workReport              ServiceWorkReport?
+  skills                       ServiceRequestSkill[]
+  specialty                    Specialty?                           @relation(fields: [specialtyId], references: [id])
+  quotes                       ServiceRequestQuote[]
+  images                       ServiceRequestImage[]
+  acceptedProviderProfile      ProviderProfile?                     @relation("AcceptedServiceRequests", fields: [acceptedProviderProfileId], references: [id])
+  customer                     User                                 @relation("CustomerServiceRequests", fields: [customerId], references: [id], onDelete: Cascade)
+  providerDeclines             ProviderRequestDecline[]
+  invitations                  ProviderRequestInvitation[]
+  payments                     Payment[]
+  priceAdjustments             ServiceRequestPriceAdjustment[]
+  review                       ServiceRequestReview?
+  chatConversation             ChatConversation?
+  disputeMessages              ServiceRequestDisputeMessage[]
+  invoice                      Invoice?
+  workReport                   ServiceWorkReport?
+  providerCancellationRequests ServiceRequestProviderCancellation[]
 
   @@index([acceptedProviderProfileId, status])
   @@index([specialtyId, status])
   @@index([customerId, status, createdAt, id])
+}
+
+model ServiceRequestProviderCancellation {
+  id                String                     @id @default(uuid())
+  serviceRequestId  String
+  providerProfileId String
+  reason            ProviderCancellationReason
+  note              String?                    @db.Text
+  status            ProviderCancellationStatus @default(PENDING)
+  requestedAt       DateTime                   @default(now())
+  resolvedAt        DateTime?
+  resolvedByUserId  String?
+  decisionNote      String?                    @db.Text
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status, requestedAt])
+  @@index([serviceRequestId, status, requestedAt])
+}
+
+enum PriceAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model ServiceRequestPriceAdjustment {
+  id                 String                @id @default(uuid())
+  serviceRequestId   String
+  proposedByUserId   String
+  reason             String                @db.Text
+  items              Json
+  previousTotalToman Int
+  newTotalToman      Int
+  amountToman        Int
+  status             PriceAdjustmentStatus @default(PENDING)
+  respondedAt        DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  payments       Payment[]
+
+  @@index([serviceRequestId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Invoice {
@@ -617,7 +683,7 @@ model Invoice {
   updatedAt         DateTime      @updatedAt
 
   serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
-  customer        User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer        User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
   notifications   Notification[]
 
@@ -626,17 +692,17 @@ model Invoice {
 }
 
 model ServiceWorkReport {
-  id               String   @id @default(uuid())
-  serviceRequestId String   @unique
+  id                String    @id @default(uuid())
+  serviceRequestId  String    @unique
   providerProfileId String
-  summary          String   @db.Text
-  materials        Json     @default("[]")
-  warrantyDays     Int?
-  warrantyNote     String?  @db.Text
-  completedAt      DateTime @default(now())
+  summary           String    @db.Text
+  materials         Json      @default("[]")
+  warrantyDays      Int?
+  warrantyNote      String?   @db.Text
+  completedAt       DateTime  @default(now())
   warrantyExpiresAt DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
@@ -757,6 +823,7 @@ enum PaymentGateway {
 model Payment {
   id                        String         @id @default(uuid())
   serviceRequestId          String
+  priceAdjustmentId         String?
   amountToman               Int
   gateway                   PaymentGateway @default(ZARINPAL)
   status                    PaymentStatus  @default(PENDING)
@@ -768,10 +835,12 @@ model Payment {
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
 
-  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  serviceRequest  ServiceRequest                 @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  priceAdjustment ServiceRequestPriceAdjustment? @relation(fields: [priceAdjustmentId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([serviceRequestId, createdAt])
+  @@index([priceAdjustmentId, createdAt])
 }
 
 model ProviderRequestDecline {
@@ -1048,9 +1117,9 @@ model ProviderStory {
   createdAt          DateTime                        @default(now())
   updatedAt          DateTime                        @updatedAt
 
-  providerProfile ProviderProfile            @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
-  specialty       Specialty?                 @relation(fields: [specialtyId], references: [id], onDelete: SetNull)
-  reviewedByAdmin User?                      @relation(fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+  providerProfile ProviderProfile             @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  specialty       Specialty?                  @relation(fields: [specialtyId], references: [id], onDelete: SetNull)
+  reviewedByAdmin User?                       @relation(fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
   views           ProviderStoryView[]
   approvalLogs    ProviderStoryApprovalLog[]
   stats           ProviderStoryStat?
@@ -1071,9 +1140,9 @@ model ProviderStoryConversation {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  story           ProviderStory        @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  customer        User                 @relation("ProviderStoryCustomer", fields: [customerUserId], references: [id], onDelete: Cascade)
-  providerProfile ProviderProfile      @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  story           ProviderStory          @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  customer        User                   @relation("ProviderStoryCustomer", fields: [customerUserId], references: [id], onDelete: Cascade)
+  providerProfile ProviderProfile        @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
   messages        ProviderStoryMessage[]
 
   @@unique([storyId, customerUserId])

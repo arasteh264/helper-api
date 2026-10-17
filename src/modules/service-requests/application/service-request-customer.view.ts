@@ -53,6 +53,14 @@ export type CustomerViewSource = {
     createdAt: Date;
   } | null;
   payments?: { id: string }[];
+  providerCancellationRequests?: {
+    id: string;
+    reason: string;
+    note: string | null;
+    status: string;
+    requestedAt: Date;
+    decisionNote: string | null;
+  }[];
 };
 
 export function toCustomerView(request: CustomerViewSource) {
@@ -149,6 +157,10 @@ export function toCustomerView(request: CustomerViewSource) {
         }
       : null,
     wasPaid: (request.payments?.length ?? 0) > 0,
+    cancellationRequest: request.providerCancellationRequests?.[0] ?? null,
+    canRepeat:
+      request.status === 'CANCELLED' &&
+      request.providerCancellationRequests?.[0]?.status === 'APPROVED',
     workReport: request.workReport
       ? {
           summary: request.workReport.summary,

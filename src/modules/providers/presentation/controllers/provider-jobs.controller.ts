@@ -10,6 +10,7 @@ import { RaiseProviderNonPaymentDisputeDto } from '../../application/dto/raise-p
 import { DeclineServiceRequestDto } from '../../application/dto/decline-service-request.dto';
 import { SubmitServiceRequestQuoteDto } from '../../application/dto/submit-service-request-quote.dto';
 import { CompleteServiceRequestDto } from '../../application/dto/complete-service-request.dto';
+import { RequestServiceCancellationDto } from '../../application/dto/request-service-cancellation.dto';
 
 @ApiTags('Provider Jobs')
 @ApiBearerAuth()
@@ -71,6 +72,22 @@ export class ProviderJobsController {
     @Param('requestId') requestId: string,
   ) {
     return this.providerJobsUseCase.start(user.userId, requestId);
+  }
+
+  @ApiOperation({
+    summary: 'Request administrator review to cancel an accepted job',
+  })
+  @Post(':requestId/cancellation')
+  requestCancellation(
+    @CurrentUser() user: TokenPayload,
+    @Param('requestId') requestId: string,
+    @Body() dto: RequestServiceCancellationDto,
+  ) {
+    return this.providerJobsUseCase.requestCancellation(
+      user.userId,
+      requestId,
+      dto,
+    );
   }
 
   @ApiOperation({ summary: 'Complete an in-progress job' })

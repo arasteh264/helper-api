@@ -395,6 +395,18 @@ export class ServiceRequestController {
           },
         },
         workReport: true,
+        providerCancellationRequests: {
+          orderBy: { requestedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            reason: true,
+            note: true,
+            status: true,
+            requestedAt: true,
+            decisionNote: true,
+          },
+        },
       },
     });
     if (!request) throw new NotFoundException('درخواست پیدا نشد');
@@ -402,6 +414,84 @@ export class ServiceRequestController {
       throw new ForbiddenException('به این درخواست دسترسی ندارید');
     }
     return this.toCustomerView(request);
+  }
+
+  @ApiOperation({
+    summary: 'Create a new request by copying an approved-cancelled request',
+  })
+  @Post(':id/repeat')
+  async repeatCancelledRequest(
+    @CurrentUser() currentUser: TokenPayload,
+    @Param('id') id: string,
+  ) {
+    const original = await this.prisma.serviceRequest.findFirst({
+      where: {
+        id,
+        customerId: currentUser.userId,
+        status: 'CANCELLED',
+        providerCancellationRequests: { some: { status: 'APPROVED' } },
+      },
+      include: {
+        skills: { select: { skillId: true } },
+        images: { select: { url: true, publicId: true } },
+      },
+    });
+    if (!original) {
+      throw new ConflictException(
+        'فقط درخواستی که لغو آن توسط مدیر تأیید شده باشد قابل ثبت مجدد است',
+      );
+    }
+
+    const reviewSettings = await this.prisma.walletConfiguration.findUnique({
+      where: { id: 'global' },
+      select: { requireServiceRequestReview: true },
+    });
+    const status =
+      reviewSettings?.requireServiceRequestReview ?? true
+        ? 'PENDING_ADMIN_REVIEW'
+        : 'OPEN';
+    const repeated = await this.prisma.serviceRequest.create({
+      data: {
+        customerId: currentUser.userId,
+        specialtyId: original.specialtyId,
+        title: original.title,
+        description: original.description,
+        status,
+        address: original.address,
+        latitude: original.latitude,
+        longitude: original.longitude,
+        budgetMin: original.budgetMin,
+        budgetMax: original.budgetMax,
+        preferredTime: original.preferredTime,
+        scheduledAt: original.scheduledAt,
+        skills: {
+          create: original.skills.map(({ skillId }) => ({ skillId })),
+        },
+        images: {
+          create: original.images.map(({ url, publicId }) => ({
+            url,
+            publicId,
+          })),
+        },
+      },
+      select: { id: true, status: true },
+    });
+    if (repeated.status === 'OPEN') {
+      void this.matchProviders.execute(repeated.id).catch((error: unknown) =>
+        this.logger.error(
+          `Matching failed for repeated request ${repeated.id}`,
+          error instanceof Error ? error.stack : String(error),
+        ),
+      );
+    }
+    return {
+      id: repeated.id,
+      status: repeated.status,
+      message:
+        repeated.status === 'OPEN'
+          ? 'درخواست مشابه دوباره برای متخصصان ارسال شد'
+          : 'درخواست مشابه برای بررسی مدیر ثبت شد',
+    };
   }
 
   @ApiOperation({
@@ -694,6 +784,14 @@ export class ServiceRequestController {
       completedAt: Date;
       warrantyExpiresAt: Date | null;
     } | null;
+    providerCancellationRequests: {
+      id: string;
+      reason: string;
+      note: string | null;
+      status: string;
+      requestedAt: Date;
+      decisionNote: string | null;
+    }[];
   }) {
     const provider = request.acceptedProviderProfile;
     const status =
@@ -789,6 +887,10 @@ export class ServiceRequestController {
           }
         : null,
       wasPaid: request.payments.length > 0,
+      cancellationRequest: request.providerCancellationRequests[0] ?? null,
+      canRepeat:
+        request.status === 'CANCELLED' &&
+        request.providerCancellationRequests[0]?.status === 'APPROVED',
       workReport: request.workReport
         ? {
             summary: request.workReport.summary,

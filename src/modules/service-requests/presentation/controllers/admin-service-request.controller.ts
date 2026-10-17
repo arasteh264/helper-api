@@ -30,6 +30,8 @@ import {
 } from '../../application/dto/review-service-request.dto';
 import { PrismaService } from '../../../../infrastructure/database/prisma.service';
 import { MatchProvidersForRequestUseCase } from '../../../matching/application/match-providers-for-request.use-case';
+import { ReviewProviderCancellationDto } from '../../application/dto/review-provider-cancellation.dto';
+import { NotificationsService } from '../../../notifications/notifications.service';
 
 @ApiTags('Admin - Service Requests')
 @ApiBearerAuth()
@@ -44,6 +46,7 @@ export class AdminServiceRequestController {
     private readonly actionsUseCases: AdminServiceRequestActionsUseCases,
     private readonly prisma: PrismaService,
     private readonly matchProviders: MatchProvidersForRequestUseCase,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @ApiOperation({ summary: 'Get service request review settings' })
@@ -146,6 +149,185 @@ export class AdminServiceRequestController {
       });
     }
     return result;
+  }
+
+  @ApiOperation({
+    summary: 'List provider cancellation requests pending review',
+  })
+  @Get('cancellation-requests')
+  async listProviderCancellationRequests() {
+    const requests =
+      await this.prisma.serviceRequestProviderCancellation.findMany({
+        where: { status: 'PENDING' },
+        include: {
+          serviceRequest: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+              address: true,
+              payments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { status: true, amountToman: true },
+              },
+              customer: {
+                select: { id: true, name: true, phone: true, email: true },
+              },
+            },
+          },
+          providerProfile: {
+            select: {
+              id: true,
+              user: { select: { id: true, name: true, phone: true } },
+            },
+          },
+        },
+        orderBy: { requestedAt: 'asc' },
+      });
+
+    return requests.map((request) => ({
+      id: request.id,
+      reason: request.reason,
+      note: request.note,
+      requestedAt: request.requestedAt,
+      serviceRequest: request.serviceRequest,
+      provider: {
+        id: request.providerProfile.id,
+        user: request.providerProfile.user,
+      },
+    }));
+  }
+
+  @ApiOperation({
+    summary: 'Approve or reject a provider cancellation request',
+  })
+  @Patch(':id/cancellation-review')
+  async reviewProviderCancellation(
+    @CurrentUser() admin: TokenPayload,
+    @Param('id') id: string,
+    @Body() dto: ReviewProviderCancellationDto,
+  ) {
+    const note = dto.note?.trim() || null;
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id" FROM "ServiceRequestProviderCancellation" WHERE "id" = ${id} FOR UPDATE
+      `;
+      const cancellation =
+        await transaction.serviceRequestProviderCancellation.findUnique({
+          where: { id },
+          include: {
+            serviceRequest: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                customerId: true,
+                acceptedProviderProfileId: true,
+              },
+            },
+            providerProfile: { select: { id: true, userId: true } },
+          },
+        });
+      if (!cancellation) {
+        throw new NotFoundException('درخواست لغو پیدا نشد');
+      }
+      if (
+        cancellation.status !== 'PENDING' ||
+        !['OFFER_ACCEPTED', 'IN_PROGRESS'].includes(
+          cancellation.serviceRequest.status,
+        )
+      ) {
+        throw new ConflictException(
+          'این درخواست لغو دیگر در انتظار بررسی نیست',
+        );
+      }
+
+      const targetStatus = dto.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+      if (dto.decision === 'APPROVE') {
+        const updatedRequest = await transaction.serviceRequest.updateMany({
+          where: {
+            id: cancellation.serviceRequestId,
+            acceptedProviderProfileId: cancellation.providerProfileId,
+            status: { in: ['OFFER_ACCEPTED', 'IN_PROGRESS'] },
+          },
+          data: { status: 'CANCELLED' },
+        });
+        if (updatedRequest.count !== 1) {
+          throw new ConflictException('وضعیت درخواست هم‌زمان تغییر کرده است');
+        }
+      }
+      const updatedCancellation =
+        await transaction.serviceRequestProviderCancellation.updateMany({
+          where: { id, status: 'PENDING' },
+          data: {
+            status: targetStatus,
+            resolvedAt: new Date(),
+            resolvedByUserId: admin.userId,
+            decisionNote: note,
+          },
+        });
+      if (updatedCancellation.count !== 1) {
+        throw new ConflictException('درخواست لغو هم‌زمان بررسی شده است');
+      }
+      await transaction.adminAuditLog.create({
+        data: {
+          actorUserId: admin.userId,
+          action:
+            dto.decision === 'APPROVE'
+              ? 'PROVIDER_CANCELLATION_APPROVED'
+              : 'PROVIDER_CANCELLATION_REJECTED',
+          targetType: 'SERVICE_REQUEST_PROVIDER_CANCELLATION',
+          targetId: id,
+          reason: note ?? cancellation.reason,
+          beforeState: {
+            requestStatus: cancellation.serviceRequest.status,
+            cancellationStatus: cancellation.status,
+          },
+          afterState: {
+            requestStatus:
+              dto.decision === 'APPROVE'
+                ? 'CANCELLED'
+                : cancellation.serviceRequest.status,
+            cancellationStatus: targetStatus,
+            note,
+          },
+        },
+      });
+      return {
+        id,
+        status: targetStatus,
+        serviceRequestId: cancellation.serviceRequest.id,
+        serviceRequestTitle: cancellation.serviceRequest.title,
+        customerId: cancellation.serviceRequest.customerId,
+        providerUserId: cancellation.providerProfile.userId,
+      };
+    });
+
+    const approved = dto.decision === 'APPROVE';
+    const message = approved
+      ? `درخواست لغو کار «${result.serviceRequestTitle}» توسط مدیر تأیید شد.`
+      : `درخواست لغو کار «${result.serviceRequestTitle}» توسط مدیر رد شد.${note ? ` دلیل: ${note}` : ''}`;
+    await Promise.all([
+      this.notifications.createForUser({
+        userId: result.customerId,
+        category: 'WORK_UPDATES',
+        type: 'SERVICE_REQUEST_STATUS',
+        title: approved ? 'لغو درخواست تأیید شد' : 'درخواست لغو رد شد',
+        body: message,
+        serviceRequestId: result.serviceRequestId,
+      }),
+      this.notifications.createForUser({
+        userId: result.providerUserId,
+        category: 'WORK_UPDATES',
+        type: 'SERVICE_REQUEST_STATUS',
+        title: approved ? 'درخواست لغو کار تأیید شد' : 'درخواست لغو کار رد شد',
+        body: message,
+        serviceRequestId: result.serviceRequestId,
+      }),
+    ]);
+    return { id: result.id, status: result.status };
   }
 
   @ApiOperation({ summary: 'List all service requests (admin)' })

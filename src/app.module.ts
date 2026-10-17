@@ -16,6 +16,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { PriceAdjustmentsModule } from './modules/price-adjustments/price-adjustments.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
     ChatModule,
     BlogModule,
     InvoicesModule,
+    PriceAdjustmentsModule,
     AdminModule,
   ],
   controllers: [AppController],

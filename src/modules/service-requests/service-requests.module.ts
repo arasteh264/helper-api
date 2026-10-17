@@ -13,9 +13,15 @@ import { ListMyServiceRequestsUseCase } from '../customers/application/list-my-s
 import { MatchingModule } from '../matching/matching.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { AdminServiceRequestActionsUseCases } from './application/admin-service-request-actions.use-cases';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [ProvidersModule, MatchingModule, PaymentsModule],
+  imports: [
+    ProvidersModule,
+    MatchingModule,
+    PaymentsModule,
+    NotificationsModule,
+  ],
   controllers: [
     PublicServiceCategoriesController,
     ServiceRequestController,

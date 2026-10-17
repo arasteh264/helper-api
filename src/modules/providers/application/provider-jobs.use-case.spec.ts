@@ -3,6 +3,7 @@ import { ProviderJobsUseCase } from './provider-jobs.use-case';
 
 function createFixture(pricingMode: 'QUOTE' | 'HOURLY', rate: number | null) {
   const transaction = {
+    $queryRaw: jest.fn(),
     serviceRequest: {
       findFirst: jest.fn().mockResolvedValue({
         id: 'request-1',
@@ -25,6 +26,12 @@ function createFixture(pricingMode: 'QUOTE' | 'HOURLY', rate: number | null) {
     },
     serviceWorkReport: {
       create: jest.fn().mockResolvedValue({ id: 'report-1' }),
+    },
+    serviceRequestPriceAdjustment: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    serviceRequestProviderCancellation: {
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   };
   const prisma = {
@@ -125,6 +132,78 @@ describe('ProviderJobsUseCase.accept', () => {
 });
 
 describe('ProviderJobsUseCase work status notifications', () => {
+  it('records a cancellation request and notifies the customer', async () => {
+    const cancellation = {
+      id: 'cancellation-1',
+      reason: 'OTHER',
+      note: 'محل پروژه با توضیحات ثبت‌شده مطابقت ندارد',
+      status: 'PENDING',
+      requestedAt: new Date('2026-10-17T10:00:00Z'),
+    };
+    const transaction = {
+      $queryRaw: jest.fn(),
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'request-1',
+          customerId: 'customer-user',
+          title: 'تعمیرات',
+        }),
+      },
+      serviceRequestProviderCancellation: {
+        create: jest.fn().mockResolvedValue(cancellation),
+      },
+    };
+    const prisma = {
+      providerProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'provider-profile-1',
+          verificationStatus: 'APPROVED',
+          isAvailable: true,
+          skills: [],
+        }),
+      },
+      $transaction: jest.fn(
+        (callback: (db: typeof transaction) => unknown) => callback(transaction),
+      ),
+    };
+    const notifications = { createForUser: jest.fn().mockResolvedValue(null) };
+    const useCase = new ProviderJobsUseCase(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+
+    await expect(
+      useCase.requestCancellation('provider-user', 'request-1', {
+        reason: 'OTHER',
+        note: cancellation.note,
+      }),
+    ).resolves.toMatchObject({
+      message: 'درخواست لغو برای بررسی مدیر ارسال شد',
+      cancellationRequest: cancellation,
+    });
+    expect(transaction.serviceRequest.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          acceptedProviderProfileId: 'provider-profile-1',
+          status: { in: ['OFFER_ACCEPTED', 'IN_PROGRESS'] },
+          providerCancellationRequests: { none: { status: 'PENDING' } },
+        }),
+      }),
+    );
+    expect(transaction.serviceRequestProviderCancellation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          serviceRequestId: 'request-1',
+          providerProfileId: 'provider-profile-1',
+          reason: 'OTHER',
+        }),
+      }),
+    );
+    expect(notifications.createForUser).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'customer-user' }),
+    );
+  });
+
   it('lets the assigned provider report non-payment while awaiting payment', async () => {
     const prisma = {
       providerProfile: {
