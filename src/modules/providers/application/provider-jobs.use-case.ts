@@ -14,6 +14,7 @@ import type { ProviderDeclineReason } from './dto/decline-service-request.dto';
 import type { SubmitServiceRequestQuoteDto } from './dto/submit-service-request-quote.dto';
 import { QuoteItemSupplyMode } from './dto/submit-service-request-quote.dto';
 import type { CompleteServiceRequestDto } from './dto/complete-service-request.dto';
+import type { RequestServiceCancellationDto } from './dto/request-service-cancellation.dto';
 
 @Injectable()
 export class ProviderJobsUseCase {
@@ -114,6 +115,18 @@ export class ProviderJobsUseCase {
             },
           },
           workReport: true,
+          providerCancellationRequests: {
+            orderBy: { requestedAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              reason: true,
+              note: true,
+              status: true,
+              requestedAt: true,
+              decisionNote: true,
+            },
+          },
         },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -198,6 +211,10 @@ export class ProviderJobsUseCase {
         viewStatus === 'awaiting_confirmation';
       const paymentStatus = request.payments[0]?.status ?? 'PENDING';
       const quote = quoteByRequestId.get(request.id);
+      const cancellationRequest =
+        'providerCancellationRequests' in request
+          ? request.providerCancellationRequests[0]
+          : undefined;
       return {
         id: request.id,
         title: request.title,
@@ -234,6 +251,7 @@ export class ProviderJobsUseCase {
         quoteNote: quote?.quoteNote ?? undefined,
         quoteItems: quote?.items ?? [],
         status: viewStatus,
+        ...(cancellationRequest ? { cancellationRequest } : {}),
         ...(viewStatus === 'declined'
           ? {
               declineReason,
@@ -570,6 +588,62 @@ export class ProviderJobsUseCase {
     );
   }
 
+  async requestCancellation(
+    userId: string,
+    requestId: string,
+    input: RequestServiceCancellationDto,
+  ) {
+    const profile = await this.getApprovedProfile(userId);
+    const note = input.note?.trim() || null;
+    const cancellation = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${requestId} FOR UPDATE`;
+      const request = await tx.serviceRequest.findFirst({
+        where: {
+          id: requestId,
+          acceptedProviderProfileId: profile.id,
+          status: { in: ['OFFER_ACCEPTED', 'IN_PROGRESS'] },
+          payments: { some: { status: 'PAID' } },
+          providerCancellationRequests: { none: { status: 'PENDING' } },
+        },
+        select: { id: true, customerId: true, title: true },
+      });
+      if (!request) {
+        throw new ConflictException(
+          'این کار در وضعیت قابل لغو نیست یا درخواست لغوِ در انتظار بررسی دارد',
+        );
+      }
+      const created = await tx.serviceRequestProviderCancellation.create({
+        data: {
+          serviceRequestId: request.id,
+          providerProfileId: profile.id,
+          reason: input.reason,
+          note,
+        },
+        select: {
+          id: true,
+          reason: true,
+          note: true,
+          status: true,
+          requestedAt: true,
+        },
+      });
+      return { request, cancellation: created };
+    });
+
+    await this.notifications.createForUser({
+      userId: cancellation.request.customerId,
+      category: 'WORK_UPDATES',
+      type: 'SERVICE_REQUEST_STATUS',
+      title: 'درخواست لغو کار برای بررسی ارسال شد',
+      body: `متخصص برای درخواست «${cancellation.request.title}» درخواست لغو ثبت کرده است. نتیجه پس از بررسی مدیر اطلاع داده می‌شود.`,
+      serviceRequestId: requestId,
+    });
+    return {
+      message: 'درخواست لغو برای بررسی مدیر ارسال شد',
+      cancellationRequest: cancellation.cancellation,
+    };
+  }
+
   async complete(
     userId: string,
     requestId: string,
@@ -607,6 +681,30 @@ export class ProviderJobsUseCase {
         ? new Date(completedAt.getTime() + warrantyDays * 24 * 60 * 60 * 1000)
         : null;
     const report = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${request.id} FOR UPDATE`;
+      const activeAdjustment =
+        await tx.serviceRequestPriceAdjustment.findFirst({
+          where: {
+            serviceRequestId: request.id,
+            status: { in: ['PENDING', 'APPROVED'] },
+          },
+          select: { id: true },
+        });
+      if (activeAdjustment) {
+        throw new ConflictException(
+          'تا زمان پاسخ مشتری و پرداخت اصلاح مبلغ، امکان ثبت پایان کار نیست',
+        );
+      }
+      const pendingCancellation =
+        await tx.serviceRequestProviderCancellation.findFirst({
+          where: { serviceRequestId: request.id, status: 'PENDING' },
+          select: { id: true },
+        });
+      if (pendingCancellation) {
+        throw new ConflictException(
+          'تا زمان بررسی درخواست لغو توسط مدیر، امکان ثبت پایان کار نیست',
+        );
+      }
       const createdReport = await tx.serviceWorkReport.create({
         data: {
           serviceRequestId: request.id,
@@ -625,6 +723,7 @@ export class ProviderJobsUseCase {
           acceptedProviderProfileId: profile.id,
           status: 'IN_PROGRESS',
           payments: { some: { status: 'PAID' } },
+          providerCancellationRequests: { none: { status: 'PENDING' } },
         },
         data: {
           status: 'AWAITING_CUSTOMER_CONFIRMATION',
@@ -664,6 +763,7 @@ export class ProviderJobsUseCase {
         acceptedProviderProfileId: profile.id,
         status: currentStatus,
         payments: { some: { status: 'PAID' } },
+        providerCancellationRequests: { none: { status: 'PENDING' } },
       },
       data: {
         status: nextStatus,

@@ -13,6 +13,7 @@ import {
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PRISMA_SERVICE } from '../../infrastructure/database/prisma.service.token';
 import { NotificationsService } from '../notifications/notifications.service';
+import type { Prisma } from '../../../generated/prisma/client';
 import type { DisputeReason } from '../../../generated/prisma/enums';
 
 type ZarinpalReply = {
@@ -336,6 +337,123 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       if (request.status !== 'CUSTOMER_CONFIRMATION_PENDING') {
         throw new ConflictException('این درخواست هنوز آماده‌ی پرداخت نیست');
       }
+
+      async createPriceAdjustmentCheckout(userId: string, adjustmentId: string) {
+        const config = this.getConfig();
+        const reservation = await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "ServiceRequestPriceAdjustment" WHERE "id" = ${adjustmentId} FOR UPDATE`;
+
+          const adjustment = await tx.serviceRequestPriceAdjustment.findFirst({
+            where: {
+              id: adjustmentId,
+              status: 'APPROVED',
+              serviceRequest: {
+                customerId: userId,
+                status: 'IN_PROGRESS',
+              },
+            },
+            select: {
+              id: true,
+              amountToman: true,
+              serviceRequestId: true,
+              payments: {
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: { status: true, authority: true },
+              },
+            },
+          });
+          if (!adjustment) {
+            throw new NotFoundException(
+              'اصلاح مبلغ تأییدشده و قابل پرداخت پیدا نشد',
+            );
+          }
+
+          const latestPayment = adjustment.payments[0];
+          if (latestPayment?.status === 'PAID') {
+            throw new ConflictException('این اصلاح مبلغ قبلاً پرداخت شده است');
+          }
+          if (latestPayment?.status === 'PENDING') {
+            if (latestPayment.authority) {
+              return {
+                existingAuthority: latestPayment.authority,
+                requestId: adjustment.serviceRequestId,
+              } satisfies CheckoutReservation;
+            }
+            throw new ConflictException(
+              'پرداخت این اصلاح مبلغ در حال آماده‌سازی است',
+            );
+          }
+
+          const payment = await tx.payment.create({
+            data: {
+              serviceRequestId: adjustment.serviceRequestId,
+              priceAdjustmentId: adjustment.id,
+              amountToman: adjustment.amountToman,
+            },
+            select: { id: true },
+          });
+          return {
+            paymentId: payment.id,
+            amountToman: adjustment.amountToman,
+            requestId: adjustment.serviceRequestId,
+          } satisfies CheckoutReservation;
+        });
+
+        if ('existingAuthority' in reservation) {
+          return {
+            paymentUrl: this.getStartPayUrl(
+              config.sandbox,
+              reservation.existingAuthority,
+            ),
+            requestId: reservation.requestId,
+          };
+        }
+
+        const amountRial = reservation.amountToman * 10;
+        if (!Number.isSafeInteger(amountRial)) {
+          await this.markFailed(reservation.paymentId, 'مبلغ پرداخت معتبر نیست');
+          throw new BadGatewayException('مبلغ پرداخت معتبر نیست');
+        }
+
+        try {
+          const reply = await this.post<ZarinpalReply>(
+            this.getApiUrl(config.sandbox, 'request'),
+            {
+              merchant_id: config.merchantId,
+              amount: amountRial,
+              callback_url: config.callbackUrl,
+              description: `مابه‌التفاوت درخواست ${reservation.requestId}`,
+            },
+          );
+          const authority = reply.data?.authority;
+          if (reply.data?.code !== 100 || !authority) {
+            await this.markFailed(
+              reservation.paymentId,
+              reply.data?.message ?? `Zarinpal code ${reply.data?.code}`,
+            );
+            throw new BadGatewayException('درگاه پرداخت درخواست را نپذیرفت');
+          }
+
+          await this.prisma.payment.update({
+            where: { id: reservation.paymentId },
+            data: { authority },
+          });
+          return {
+            paymentUrl: this.getStartPayUrl(config.sandbox, authority),
+            requestId: reservation.requestId,
+          };
+        } catch (error) {
+          if (!(error instanceof BadGatewayException)) {
+            await this.markFailed(
+              reservation.paymentId,
+              error instanceof Error ? error.message : 'Zarinpal request failed',
+            );
+            throw new BadGatewayException('ارتباط با درگاه پرداخت برقرار نشد');
+          }
+          throw error;
+        }
+      }
       if (!request.providerPriceToman || request.providerPriceToman <= 0) {
         throw new ConflictException('قیمت نهایی provider ثبت نشده است');
       }
@@ -615,10 +733,23 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         amountToman: true,
         status: true,
         serviceRequestId: true,
+        priceAdjustmentId: true,
+        priceAdjustment: {
+          select: {
+            id: true,
+            status: true,
+            previousTotalToman: true,
+            newTotalToman: true,
+            amountToman: true,
+            items: true,
+          },
+        },
         serviceRequest: {
           select: {
+            providerPriceToman: true,
             title: true,
             customerId: true,
+            invoice: { select: { id: true, items: true } },
             acceptedProviderProfile: { select: { userId: true } },
           },
         },
@@ -721,15 +852,89 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       const request = await tx.serviceRequest.updateMany({
         where: {
           id: payment.serviceRequestId,
-          status: 'CUSTOMER_CONFIRMATION_PENDING',
+          ...(payment.priceAdjustment
+            ? {
+                status: 'IN_PROGRESS' as const,
+                providerPriceToman:
+                  payment.priceAdjustment.previousTotalToman,
+              }
+            : { status: 'CUSTOMER_CONFIRMATION_PENDING' as const }),
         },
-        data: { status: 'OFFER_ACCEPTED' },
+        data: payment.priceAdjustment
+          ? { providerPriceToman: payment.priceAdjustment.newTotalToman }
+          : { status: 'OFFER_ACCEPTED' },
       });
       if (request.count === 0) {
         throw new ConflictException('وضعیت درخواست برای پرداخت معتبر نیست');
       }
+      if (payment.priceAdjustment) {
+        const adjustment = await tx.serviceRequestPriceAdjustment.updateMany({
+          where: {
+            id: payment.priceAdjustment.id,
+            status: 'APPROVED',
+          },
+          data: { status: 'PAID', paidAt: new Date() },
+        });
+        if (!adjustment.count) {
+          throw new ConflictException(
+            'وضعیت اصلاح مبلغ برای پرداخت معتبر نیست',
+          );
+        }
+
+        if (payment.serviceRequest.invoice) {
+          const currentItems = Array.isArray(
+            payment.serviceRequest.invoice.items,
+          )
+            ? payment.serviceRequest.invoice.items
+            : [];
+          const adjustmentItems = Array.isArray(payment.priceAdjustment.items)
+            ? payment.priceAdjustment.items
+            : [];
+          await tx.invoice.update({
+            where: { id: payment.serviceRequest.invoice.id },
+            data: {
+              totalToman: payment.priceAdjustment.newTotalToman,
+              items: [
+                ...currentItems,
+                ...adjustmentItems,
+              ] as Prisma.InputJsonValue,
+            },
+          });
+        }
+
+        await tx.notification.create({
+          data: {
+            userId: payment.serviceRequest.customerId,
+            category: 'PAYMENTS',
+            type: 'PAYMENT_UPDATE',
+            title: 'اصلاح مبلغ پرداخت و ثبت شد',
+            body: `پرداخت مابه‌التفاوت درخواست «${payment.serviceRequest.title}» تأیید شد و مبلغ نهایی به‌روزرسانی شد.`,
+            serviceRequestId: payment.serviceRequestId,
+          },
+        });
+        if (payment.serviceRequest.acceptedProviderProfile?.userId) {
+          await tx.notification.create({
+            data: {
+              userId: payment.serviceRequest.acceptedProviderProfile.userId,
+              category: 'PAYMENTS',
+              type: 'PAYMENT_UPDATE',
+              title: 'مابه‌التفاوت مبلغ پرداخت شد',
+              body: `مشتری مابه‌التفاوت ${payment.amountToman.toLocaleString('fa-IR')} تومان درخواست «${payment.serviceRequest.title}» را پرداخت کرد.`,
+              serviceRequestId: payment.serviceRequestId,
+            },
+          });
+        }
+      }
       return true;
     });
+
+    if (payment.priceAdjustment) {
+      return this.getReturnUrl(
+        config.returnUrl,
+        'success',
+        payment.serviceRequestId,
+      );
+    }
 
     if (
       paymentConfirmed &&
@@ -1618,22 +1823,32 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           payments: {
             where: { status: 'PAID' },
             orderBy: { createdAt: 'desc' },
-            take: 1,
             select: { id: true, amountToman: true },
           },
           acceptedProviderProfile: { select: { userId: true } },
         },
       });
-      const payment = disputedRequest?.payments[0];
-      if (!disputedRequest || !payment) {
+      const paidPayments = disputedRequest?.payments ?? [];
+      const refundAmountToman = paidPayments.reduce(
+        (sum, payment) => sum + payment.amountToman,
+        0,
+      );
+      if (
+        !disputedRequest ||
+        !paidPayments.length ||
+        !Number.isSafeInteger(refundAmountToman)
+      ) {
         throw new ConflictException('وضعیت اختلاف تغییر کرده است');
       }
 
       const paid = await tx.payment.updateMany({
-        where: { id: payment.id, status: 'PAID' },
+        where: {
+          id: { in: paidPayments.map(({ id }) => id) },
+          status: 'PAID',
+        },
         data: { status: 'REFUNDED' },
       });
-      if (!paid.count)
+      if (paid.count !== paidPayments.length)
         throw new ConflictException('پرداخت قبلاً تعیین‌تکلیف شده است');
 
       const cancelled = await tx.serviceRequest.updateMany({
@@ -1670,16 +1885,16 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       await tx.customerWallet.update({
         where: { id: wallet.id },
         data: {
-          balance: { increment: payment.amountToman },
+          balance: { increment: refundAmountToman },
           totalSpent: {
-            decrement: Math.min(currentWallet.totalSpent, payment.amountToman),
+            decrement: Math.min(currentWallet.totalSpent, refundAmountToman),
           },
         },
       });
       await tx.customerWalletTopup.create({
         data: {
           customerWalletId: wallet.id,
-          amountToman: payment.amountToman,
+          amountToman: refundAmountToman,
           gateway: 'WALLET',
           status: 'PAID',
           referenceId: `DISPUTE-${disputedRequest.id}`,
@@ -1692,7 +1907,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         title: disputedRequest.title,
         customerId: disputedRequest.customerId,
         providerUserId: disputedRequest.acceptedProviderProfile?.userId,
-        amountToman: payment.amountToman,
+        amountToman: refundAmountToman,
       };
     });
 
