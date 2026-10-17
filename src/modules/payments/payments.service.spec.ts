@@ -75,6 +75,67 @@ describe('PaymentsService', () => {
     });
   });
 
+  it('creates a sandbox checkout for only the approved price difference', async () => {
+    setPaymentConfig();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      serviceRequestPriceAdjustment: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'adjustment-1',
+          amountToman: 25000,
+          serviceRequestId: 'request-1',
+          payments: [],
+        }),
+      },
+      payment: {
+        create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+      payment: { update: jest.fn().mockResolvedValue({}) },
+    };
+    const notifications = {
+      createForUser: jest.fn().mockResolvedValue(null),
+      sendProviderJobConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new PaymentsService(
+      prisma as unknown as PrismaService,
+      notifications as never,
+    );
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { code: 100, authority: 'A0003' } }),
+    } as Response);
+
+    const result = await service.createPriceAdjustmentCheckout(
+      'customer-1',
+      'adjustment-1',
+    );
+    const [, fetchOptions] = fetchMock.mock.calls[0];
+    const requestBody = JSON.parse(String(fetchOptions?.body));
+
+    expect(requestBody).toMatchObject({
+      merchant_id: 'test-merchant',
+      amount: 250000,
+      description: 'مابه‌التفاوت درخواست request-1',
+    });
+    expect(tx.payment.create).toHaveBeenCalledWith({
+      data: {
+        serviceRequestId: 'request-1',
+        priceAdjustmentId: 'adjustment-1',
+        amountToman: 25000,
+      },
+      select: { id: true },
+    });
+    expect(result).toEqual({
+      paymentUrl: 'https://sandbox.zarinpal.com/pg/StartPay/A0003',
+      requestId: 'request-1',
+    });
+  });
+
   it('charges the buyer wallet atomically and advances an accepted quote', async () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
